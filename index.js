@@ -4,6 +4,7 @@
 // once, keeps that browser profile, and reuses its Canvas session cookie for plain HTTPS calls.
 import { Entry } from '@napi-rs/keyring';
 import { chromium } from 'playwright-core';
+import { extractText, getDocumentProxy } from 'unpdf';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, platform } from 'node:os';
 import { join } from 'node:path';
@@ -168,7 +169,75 @@ async function canvasGet(path, params = {}, maxPages = 10) {
   return out;
 }
 
+// Follows Canvas's file download redirects. The Canvas cookie only goes to Canvas itself;
+// the final hop to file storage (inst-fs) is a signed URL and is fetched without it.
+async function fetchFile(href) {
+  let c = await getCookie();
+  let url = new URL(href);
+  let refreshed = false;
+  for (let hop = 0; hop < 6; hop++) {
+    if (url.origin !== BASE.origin) return fetch(url);
+    const r = await fetch(url, { headers: { Cookie: c }, redirect: 'manual' });
+    const loc = r.headers.get('location');
+    const next = loc && new URL(loc, url);
+    if (r.status === 401 || (next?.origin === BASE.origin && next.pathname.startsWith('/login'))) {
+      if (refreshed) throw new Error('Canvas refused the download after signing in again.');
+      c = await getCookie(c);
+      refreshed = true;
+      continue;
+    }
+    if (!next) return r;
+    url = next;
+  }
+  throw new Error('too many redirects');
+}
+
+const MAX_BYTES = 50e6;
+const MAX_CHARS = 150_000;
+
+async function canvasDownload(file) {
+  const m = String(file).match(/((?:courses\/\d+\/)?files\/\d+)|^\s*(\d+)\s*$/);
+  if (!m) throw new Error('Pass a file id, or a path/URL containing files/:id (e.g. from a module item).');
+  const meta = await canvasGet(m[1] ?? `files/${m[2]}`);
+  if (meta.size > MAX_BYTES) throw new Error(`${meta.display_name} is ${Math.round(meta.size / 1e6)} MB; the limit is 50 MB.`);
+  const dl = new URL(meta.url, BASE);
+  if (dl.origin !== BASE.origin || !/^\/(courses\/\d+\/)?files\/\d+\/download$/.test(dl.pathname))
+    throw new Error(`unexpected download URL ${meta.url}`);
+  const r = await fetchFile(dl.href);
+  if (!r.ok) throw new Error(`${r.status} ${r.statusText} downloading ${meta.display_name}`);
+  const buf = Buffer.from(await r.arrayBuffer());
+
+  mkdirSync(join(DIR, 'files'), { recursive: true, mode: 0o700 });
+  const path = join(DIR, 'files', `${meta.id}-${meta.display_name.replace(/[^\w.\- ]+/g, '_')}`);
+  writeFileSync(path, buf, { mode: 0o600 });
+  const type = meta['content-type'] || r.headers.get('content-type') || 'application/octet-stream';
+  const header = `${meta.display_name} (${type}, ${buf.length} bytes), saved to ${path}`;
+  const text = (s) => [{ type: 'text', text: s.length > MAX_CHARS ? `${s.slice(0, MAX_CHARS)}\n[truncated at ${MAX_CHARS} characters]` : s }];
+
+  if (type === 'application/pdf') {
+    const { text: pages } = await extractText(await getDocumentProxy(new Uint8Array(buf)));
+    return text(`${header}\n\n` + pages.map((p, i) => `--- page ${i + 1} ---\n${p}`).join('\n\n'));
+  }
+  if (type.startsWith('image/')) return [...text(header), { type: 'image', data: buf.toString('base64'), mimeType: type }];
+  if (type.startsWith('text/') || /json|xml|csv|markdown/.test(type)) return text(`${header}\n\n${buf.toString('utf8')}`);
+  // ponytail: no text extraction for Word/PowerPoint yet; the saved path is enough for clients that read files.
+  return text(`${header}\n\nThis type isn't converted to text. Open it from the path above.`);
+}
+
 // ---------- MCP (stdio JSON-RPC) ----------
+
+const DOWNLOAD_TOOL = {
+  name: 'canvas_download',
+  description: `Download a Canvas file and return its contents: text of every page for PDFs, the image itself for images, raw text for text files.
+Other types (Word, PowerPoint) are saved locally and the path is returned. Works for files linked from modules, pages and assignments even when a course hides its Files tab.`,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      file: { type: 'string', description: 'File id, or a path/URL containing files/:id, e.g. "courses/123/files/456" or a module item\'s url' },
+    },
+    required: ['file'],
+  },
+};
 
 const TOOL = {
   name: 'canvas_get',
@@ -176,7 +245,9 @@ const TOOL = {
 Useful paths: users/self/todo, users/self/upcoming_events, planner/items, courses (params {enrollment_state:"active"}),
 courses/:id/assignments (params {bucket:"upcoming"|"past"|"overdue", "include[]":"submission"}), courses/:id/modules (params {"include[]":"items"}),
 courses/:id/pages/:page_url, courses/:id/files, courses/:id/discussion_topics, announcements (params {"context_codes[]":"course_:id"}),
-courses/:id/assignments/:aid/submissions/self, courses/:id/enrollments (params {user_id:"self"}) for grades.`,
+courses/:id/assignments/:aid/submissions/self, courses/:id/enrollments (params {user_id:"self"}) for grades,
+courses/:id (params {"include[]":"syllabus_body"}) for the syllabus page. Many courses hide courses/:id/files (403);
+find files through modules or pages instead and read them with canvas_download.`,
   inputSchema: {
     type: 'object',
     properties: {
@@ -209,10 +280,12 @@ function serve() {
       case 'ping':
         return reply({});
       case 'tools/list':
-        return reply({ tools: [TOOL] });
+        return reply({ tools: [TOOL, DOWNLOAD_TOOL] });
       case 'tools/call':
         try {
-          const data = await canvasGet(params.arguments?.path, params.arguments?.params);
+          const a = params.arguments ?? {};
+          if (params.name === 'canvas_download') return reply({ content: await canvasDownload(a.file) });
+          const data = await canvasGet(a.path, a.params);
           return reply({ content: [{ type: 'text', text: JSON.stringify(data) }] });
         } catch (e) {
           return reply({ content: [{ type: 'text', text: String(e.message) }], isError: true });

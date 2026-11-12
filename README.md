@@ -108,9 +108,15 @@ Then ask something like:
 | Tool | What it does |
 |---|---|
 | `canvas_get` | Any read-only [Canvas REST API](https://canvas.instructure.com/doc/api/) endpoint, with pagination handled |
+| `canvas_download` | A file's contents: page-by-page text for PDFs, the image for images, raw text for text files |
 
-One general tool covers the whole API, and its description lists the endpoints that matter most
-to students, so models rarely need the docs.
+`canvas_get` covers the whole API through one general tool, and its description lists the
+endpoints that matter most to students, so models rarely need the docs. Two tools keep the tool
+list small in every conversation.
+
+`canvas_download` works for files linked from modules, pages and the syllabus, even when a course
+hides its Files tab. Downloads are also saved under the folder described in Configuration, for
+clients that can open local files.
 
 ## Configuration
 
@@ -128,6 +134,7 @@ that folder can use your Canvas session, the same as with your browser's own coo
 ## Limitations
 
 - Read-only by design. Write tools would let a model submit work as you.
-- Files are listed with their download URLs, but their contents aren't fetched.
+- PDF text comes without layout, so math and tables come out garbled. Word and PowerPoint files
+  are saved but not converted to text.
 - It won't run on a headless server. When CWL wants you to sign in again, it needs a screen to
   show the window on.
