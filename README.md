@@ -25,15 +25,18 @@ submit assignments, post to discussions or send messages.
 ## Requirements
 
 - macOS, Windows or Linux
-- Node.js 20 or newer
-- Chrome, Edge, Brave or Chromium. If you have none of them, run `npx playwright install chromium`.
+- [Bun](https://bun.sh) 1.3 or newer
+- Chrome, Edge, Brave or Chromium. If you have none of them, run `bunx playwright install chromium`.
 
 ## Setup
 
-### 1. Log in
+### 1. Install and log in
 
 ```sh
-npx -y github:adriandlam/ubc-canvas-mcp login
+git clone https://github.com/adriandlam/ubc-canvas-mcp
+cd ubc-canvas-mcp
+bun install
+bun src/cli.ts login
 ```
 
 Sign in with your CWL in the window that opens. When Duo asks whether this is your device, say
@@ -42,7 +45,7 @@ yes, so it skips MFA here for 30 days. The window closes by itself and prints yo
 To have expired sessions renewed without a window, add `--remember`:
 
 ```sh
-npx -y github:adriandlam/ubc-canvas-mcp login --remember
+bun src/cli.ts login --remember
 ```
 
 This saves the CWL login name and password you type in the window to your system keychain
@@ -51,14 +54,15 @@ the login has actually reached Canvas, and it's only ever filled in on `authenti
 
 ### 2. Connect your client
 
-Most clients take this config:
+Most clients take this config. Use full paths: `which bun` prints the first one, and the second is
+`src/cli.ts` in the folder you cloned.
 
 ```json
 {
   "mcpServers": {
     "ubc-canvas": {
-      "command": "npx",
-      "args": ["-y", "github:adriandlam/ubc-canvas-mcp"]
+      "command": "/Users/you/.bun/bin/bun",
+      "args": ["/Users/you/ubc-canvas-mcp/src/cli.ts"]
     }
   }
 }
@@ -68,7 +72,7 @@ Most clients take this config:
 <summary>Claude Code</summary>
 
 ```sh
-claude mcp add ubc-canvas -s user -- npx -y github:adriandlam/ubc-canvas-mcp
+claude mcp add ubc-canvas -s user -- "$(which bun)" "$PWD/src/cli.ts"
 ```
 
 </details>
@@ -92,7 +96,7 @@ Add the config above to `~/.cursor/mcp.json`.
 <summary>Codex</summary>
 
 ```sh
-codex mcp add ubc-canvas -- npx -y github:adriandlam/ubc-canvas-mcp
+codex mcp add ubc-canvas -- "$(which bun)" "$PWD/src/cli.ts"
 ```
 
 </details>
@@ -108,15 +112,18 @@ Then ask something like:
 | Tool | What it does |
 |---|---|
 | `canvas_get` | Any read-only [Canvas REST API](https://canvas.instructure.com/doc/api/) endpoint, with pagination handled |
-| `canvas_download` | A file's contents: page-by-page text for PDFs, the image for images, raw text for text files |
+| `canvas_download` | A file: PDFs and images as the file itself, text files as text |
 
 `canvas_get` covers the whole API through one general tool, and its description lists the
 endpoints that matter most to students, so models rarely need the docs. Two tools keep the tool
-list small in every conversation.
+list small in every conversation. Responses leave out empty fields and opaque tokens, and HTML
+(assignment descriptions, announcements, the syllabus) comes back as text with its links kept,
+which cuts list responses by a quarter to a third.
 
 `canvas_download` works for files linked from modules, pages and the syllabus, even when a course
-hides its Files tab. Downloads are also saved under the folder described in Configuration, for
-clients that can open local files.
+hides its Files tab. PDFs reach the model as PDFs, so equations, tables and figures survive. Claude
+Code saves the PDF it receives and reads it from there. Downloads are also saved under the folder
+described in Configuration, which is how Word and PowerPoint files are handed over.
 
 ## Configuration
 
@@ -129,12 +136,11 @@ clients that can open local files.
 The profile and session live in `~/Library/Application Support/ubc-canvas-mcp` on macOS,
 `%APPDATA%\ubc-canvas-mcp` on Windows and `~/.config/ubc-canvas-mcp` on Linux. Anyone who can read
 that folder can use your Canvas session, the same as with your browser's own cookies.
-`npx -y github:adriandlam/ubc-canvas-mcp logout` deletes it, along with any saved CWL login.
+`bun src/cli.ts logout` deletes the profile, session and downloads, along with any saved CWL login.
 
 ## Limitations
 
 - Read-only by design. Write tools would let a model submit work as you.
-- PDF text comes without layout, so math and tables come out garbled. Word and PowerPoint files
-  are saved but not converted to text.
+- Word and PowerPoint files are saved but not converted to text.
 - It won't run on a headless server. When CWL wants you to sign in again, it needs a screen to
   show the window on.
