@@ -84,7 +84,9 @@ async function browserLogin({ headless, remember = false }) {
     if (remember) await ctx.clearCookies({ domain: BASE.hostname }); // force the CWL form so there is something to remember
     await page.goto(BASE.href, { waitUntil: 'domcontentloaded' });
     const user = page.locator('input[name=j_username]');
-    if (!onCanvas(page.url()) && creds && (await user.count())) {
+    // Only ever type the saved password into UBC's real sign-in page (also rules out a custom CANVAS_URL).
+    const atCwl = page.url().startsWith('https://authentication.ubc.ca/');
+    if (atCwl && creds && (await user.count())) {
       await user.fill(creds.username);
       await page.locator('input[name=j_password]').fill(creds.password);
       await page.locator('button[name=_eventId_proceed]').click();
