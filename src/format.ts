@@ -1,4 +1,3 @@
-import { pathToFileURL } from 'node:url';
 import type { CanvasFile } from './canvas';
 import type { Content } from './mcp';
 
@@ -10,7 +9,7 @@ export function text(s: string): Content {
 
 // Canvas JSON is mostly nulls, empty lists, opaque tokens and HTML bodies. Drop the first three and
 // turn HTML into plain text that keeps link targets, so the model can follow files/:id links into
-// canvas_download.
+// canvas_read_file.
 export function compact(v: unknown): unknown {
   if (typeof v === 'string') return /^\s*<[a-z!][\s\S]*>\s*$/i.test(v) ? htmlToText(v) : v;
   if (Array.isArray(v)) return v.map(compact);
@@ -46,15 +45,14 @@ function htmlToText(html: string): string {
     .trim();
 }
 
-// PDFs and images go to the model as themselves; it reads both. The copy saved at `path` is for
-// types the model can't read, like Word and PowerPoint.
-export function fileContent(f: CanvasFile, path: string): Content[] {
-  const header = text(`${f.name} (${f.type}, ${f.bytes.length} bytes), saved to ${path}`);
+// PDFs and images go to the model as themselves; it reads both. Nothing is written to disk.
+export function fileContent(f: CanvasFile): Content[] {
+  const header = text(`${f.name} (${f.type}, ${f.bytes.length} bytes)`);
   const base64 = () => Buffer.from(f.bytes).toString('base64');
   if (f.type === 'application/pdf')
-    return [header, { type: 'resource', resource: { uri: pathToFileURL(path).href, mimeType: f.type, blob: base64() } }];
+    return [header, { type: 'resource', resource: { uri: f.url, mimeType: f.type, blob: base64() } }];
   if (/^image\/(png|jpeg|gif|webp)$/.test(f.type)) return [header, { type: 'image', data: base64(), mimeType: f.type }];
   if (/^text\/|^application\/(json|xml)$|\+(json|xml)$/.test(f.type))
     return [header, text(new TextDecoder().decode(f.bytes))];
-  return [header, text("This type isn't converted to text. Open it from the path above.")];
+  return [header, text(`This type can't be passed to the model. The user can open it in Canvas: ${f.url}`)];
 }

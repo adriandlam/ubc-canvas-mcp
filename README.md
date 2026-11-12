@@ -112,7 +112,7 @@ Then ask something like:
 | Tool | What it does |
 |---|---|
 | `canvas_get` | Any read-only [Canvas REST API](https://canvas.instructure.com/doc/api/) endpoint, with pagination handled |
-| `canvas_download` | A file: PDFs and images as the file itself, text files as text |
+| `canvas_read_file` | A file: PDFs and images as the file itself, text files as text |
 
 `canvas_get` covers the whole API through one general tool, and its description lists the
 endpoints that matter most to students, so models rarely need the docs. Two tools keep the tool
@@ -120,10 +120,10 @@ list small in every conversation. Responses leave out empty fields and opaque to
 (assignment descriptions, announcements, the syllabus) comes back as text with its links kept,
 which cuts list responses by a quarter to a third.
 
-`canvas_download` works for files linked from modules, pages and the syllabus, even when a course
-hides its Files tab. PDFs reach the model as PDFs, so equations, tables and figures survive. Claude
-Code saves the PDF it receives and reads it from there. Downloads are also saved under the folder
-described in Configuration, which is how Word and PowerPoint files are handed over.
+`canvas_read_file` works for files linked from modules, pages and the syllabus, even when a course
+hides its Files tab. PDFs reach the model as PDFs, so equations, tables and figures survive. The
+server keeps files in memory and never writes them to disk, though your client may keep its own
+copy of what a tool returns (Claude Code saves PDFs it receives to its session folder to read them).
 
 ## Configuration
 
@@ -136,11 +136,11 @@ described in Configuration, which is how Word and PowerPoint files are handed ov
 The profile and session live in `~/Library/Application Support/ubc-canvas-mcp` on macOS,
 `%APPDATA%\ubc-canvas-mcp` on Windows and `~/.config/ubc-canvas-mcp` on Linux. Anyone who can read
 that folder can use your Canvas session, the same as with your browser's own cookies.
-`bun src/cli.ts logout` deletes the profile, session and downloads, along with any saved CWL login.
+`bun src/cli.ts logout` deletes the profile and session, along with any saved CWL login.
 
 ## Limitations
 
 - Read-only by design. Write tools would let a model submit work as you.
-- Word and PowerPoint files are saved but not converted to text.
+- Word and PowerPoint files can't be read; the model gets their Canvas link instead.
 - It won't run on a headless server. When CWL wants you to sign in again, it needs a screen to
   show the window on.

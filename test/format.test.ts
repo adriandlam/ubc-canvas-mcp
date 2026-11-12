@@ -19,9 +19,9 @@ test('leaves text that merely contains angle brackets alone', () => {
 });
 
 test('sends only what the model can read as content', () => {
-  const file = (type: string) => fileContent({ id: 1, name: 'f', type, bytes: new TextEncoder().encode('PK\u0003\u0004 data') }, '/tmp/f');
+  const file = (type: string) => fileContent({ url: 'https://canvas.example/files/1', name: 'f', type, bytes: new TextEncoder().encode('PK\u0003\u0004 data') });
   expect(file('application/pdf')[1]).toMatchObject({ type: 'resource', resource: { mimeType: 'application/pdf' } });
   expect(file('image/png')[1]).toMatchObject({ type: 'image' });
   expect(file('image/svg+xml')[1]).toMatchObject({ type: 'text', text: 'PK\u0003\u0004 data' });
-  expect(file('application/vnd.openxmlformats-officedocument.wordprocessingml.document')[1]).toMatchObject({ text: expect.stringContaining("isn't converted") });
+  expect(file('application/vnd.openxmlformats-officedocument.wordprocessingml.document')[1]).toMatchObject({ text: expect.stringContaining('https://canvas.example/files/1') });
 });

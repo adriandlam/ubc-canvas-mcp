@@ -1,10 +1,8 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
 import type { createCanvas, Params } from './canvas';
 import { compact, fileContent, text } from './format';
 import type { Tool } from './mcp';
 
-export function canvasTools(canvas: ReturnType<typeof createCanvas>, filesDir: string): Tool[] {
+export function canvasTools(canvas: ReturnType<typeof createCanvas>): Tool[] {
   return [
     {
       name: 'canvas_get',
@@ -14,7 +12,7 @@ courses/:id/assignments (params {bucket:"upcoming"|"past"|"overdue", "include[]"
 courses/:id/pages/:page_url, courses/:id/files, courses/:id/discussion_topics, announcements (params {"context_codes[]":"course_:id"}),
 courses/:id/assignments/:aid/submissions/self, courses/:id/enrollments (params {user_id:"self"}) for grades,
 courses/:id (params {"include[]":"syllabus_body"}) for the syllabus page. Many courses hide courses/:id/files (403);
-find files through modules or pages instead and read them with canvas_download.`,
+find files through modules or pages instead and read them with canvas_read_file.`,
       inputSchema: {
         type: 'object',
         properties: {
@@ -28,9 +26,9 @@ find files through modules or pages instead and read them with canvas_download.`
       },
     },
     {
-      name: 'canvas_download',
-      description: `Download a Canvas file and return it: PDFs and images as the file itself, text files as text.
-If your client hands you a saved file path instead of the PDF, open that path to read it. Other types (Word, PowerPoint) are saved locally and the path is returned. Works for files linked from modules, pages and assignments even when a course hides its Files tab.`,
+      name: 'canvas_read_file',
+      description: `Read a Canvas file: PDFs and images come back as the file itself, text files as text. Nothing is saved on the user's computer.
+Word and PowerPoint files can't be read; you get their Canvas link instead. Works for files linked from modules, pages and assignments even when a course hides its Files tab.`,
       inputSchema: {
         type: 'object',
         properties: {
@@ -39,11 +37,7 @@ If your client hands you a saved file path instead of the PDF, open that path to
         required: ['file'],
       },
       async run({ file }: { file: string }) {
-        const f = await canvas.download(String(file));
-        mkdirSync(filesDir, { recursive: true, mode: 0o700 });
-        const path = join(filesDir, `${f.id}-${f.name.replace(/[^\w.\- ]+/g, '_')}`);
-        writeFileSync(path, f.bytes, { mode: 0o600 });
-        return fileContent(f, path);
+        return fileContent(await canvas.download(String(file)));
       },
     },
   ];

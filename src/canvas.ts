@@ -1,6 +1,6 @@
 export type Cookie = (stale?: string) => Promise<string>;
 export type Params = Record<string, string | number | boolean | (string | number)[]>;
-export type CanvasFile = { id: number; name: string; type: string; bytes: Uint8Array };
+export type CanvasFile = { url: string; name: string; type: string; bytes: Uint8Array };
 
 const MAX_PAGES = 10;
 const MAX_BYTES = 50e6;
@@ -76,7 +76,7 @@ export function createCanvas(base: URL, cookie: Cookie) {
     const r = await request(meta.url);
     if (!r.ok) throw new Error(`${r.status} ${r.statusText} downloading ${meta.display_name}`);
     return {
-      id: meta.id,
+      url: new URL(`/files/${meta.id}`, base).href,
       name: meta.display_name,
       type: meta['content-type'] || r.headers.get('content-type') || 'application/octet-stream',
       bytes: new Uint8Array(await r.arrayBuffer()),

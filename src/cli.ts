@@ -2,7 +2,6 @@
 // UBC doesn't let students create Canvas API tokens, so this signs in with CWL in a real browser
 // and calls the Canvas API with that browser session's cookie.
 import { homedir, platform } from 'node:os';
-import { rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { createAuth } from './auth';
 import { createCanvas } from './canvas';
@@ -19,13 +18,12 @@ const dir =
   }[platform() as string] ||
   join(env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'ubc-canvas-mcp');
 
-const filesDir = join(dir, 'files');
 const auth = createAuth(base, dir);
 const canvas = createCanvas(base, auth.cookie);
 
 switch (process.argv[2] ?? 'serve') {
   case 'serve':
-    await serve(canvasTools(canvas, filesDir));
+    await serve(canvasTools(canvas));
     break;
   case 'login': {
     await auth.login(process.argv.includes('--remember'));
@@ -35,8 +33,7 @@ switch (process.argv[2] ?? 'serve') {
   }
   case 'logout':
     await auth.logout();
-    rmSync(filesDir, { recursive: true, force: true });
-    console.error('Signed out: removed the browser profile, session, downloads and any saved CWL login.');
+    console.error('Signed out: removed the browser profile, session and any saved CWL login.');
     break;
   default:
     console.error('usage: ubc-canvas-mcp [serve | login [--remember] | logout]');
