@@ -2,6 +2,7 @@
 // ubc-canvas-mcp: read-only MCP server for UBC Canvas, authenticated with your own CWL login.
 // Canvas API tokens are disabled for UBC students, so this signs in through a real browser
 // once, keeps that browser profile, and reuses its Canvas session cookie for plain HTTPS calls.
+import { Entry } from '@napi-rs/keyring';
 import { chromium } from 'playwright-core';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir, platform } from 'node:os';
@@ -42,6 +43,16 @@ function findBrowser() {
   return found;
 }
 
+// Optional saved CWL login (`login --remember`), kept in the OS keychain, never on disk.
+const keychain = new Entry('ubc-canvas-mcp', 'cwl');
+const loadCreds = () => {
+  try {
+    return JSON.parse(keychain.getPassword() ?? 'null');
+  } catch {
+    return null;
+  }
+};
+
 const onCanvas = (url) => {
   const u = new URL(url);
   return u.origin === BASE.origin && !u.pathname.startsWith('/login');
@@ -49,7 +60,8 @@ const onCanvas = (url) => {
 
 // Opens the saved profile, lets CWL single sign-on run, and returns the Canvas cookie header.
 // headless: only succeeds if the profile is still signed in to CWL. headed: waits for you to log in.
-async function browserLogin({ headless }) {
+// remember: save the CWL username/password you type (only once it has actually reached Canvas).
+async function browserLogin({ headless, remember = false }) {
   mkdirSync(DIR, { recursive: true, mode: 0o700 });
   let ctx;
   try {
@@ -61,12 +73,30 @@ async function browserLogin({ headless }) {
   }
   try {
     const page = ctx.pages()[0] ?? (await ctx.newPage());
+    const creds = loadCreds();
+    let typed = null;
+    if (remember || creds)
+      page.on('request', (r) => {
+        if (r.method() !== 'POST' || new URL(r.url()).hostname !== 'authentication.ubc.ca') return;
+        const f = new URLSearchParams(r.postData() ?? '');
+        if (f.get('j_username') && f.get('j_password')) typed = { username: f.get('j_username'), password: f.get('j_password') };
+      });
+    if (remember) await ctx.clearCookies({ domain: BASE.hostname }); // force the CWL form so there is something to remember
     await page.goto(BASE.href, { waitUntil: 'domcontentloaded' });
+    const user = page.locator('input[name=j_username]');
+    if (!onCanvas(page.url()) && creds && (await user.count())) {
+      await user.fill(creds.username);
+      await page.locator('input[name=j_password]').fill(creds.password);
+      await page.locator('button[name=_eventId_proceed]').click();
+      // Duo is skipped while the browser is trusted (30 days); otherwise this waits for a push approval.
+      await page.waitForURL((u) => onCanvas(u.href), { timeout: 60_000 }).catch(() => {});
+    }
     if (!onCanvas(page.url())) {
       if (headless) return null;
       console.error('Log in with your CWL in the browser window. It closes by itself when you are done.');
       await page.waitForURL((u) => onCanvas(u.href), { timeout: 5 * 60_000 });
     }
+    if (typed && (remember || typed.password !== creds?.password)) keychain.setPassword(JSON.stringify(typed));
     const cookies = await ctx.cookies(BASE.href);
     if (!cookies.some((c) => c.name === 'canvas_session')) return null;
     const cookie = cookies.map((c) => `${c.name}=${c.value}`).join('; ');
@@ -123,7 +153,9 @@ async function canvasGet(path, params = {}, maxPages = 10) {
   const out = [];
   let next = url.href;
   for (let i = 0; next && i < maxPages; i++) {
-    if (new URL(next).origin !== BASE.origin) throw new Error(`refusing to send your session to ${next}`);
+    // URL() resolves "..", so this also stops paths escaping the API onto ordinary Canvas pages.
+    const u = new URL(next);
+    if (u.origin !== BASE.origin || !u.pathname.startsWith('/api/v1/')) throw new Error(`refusing to request ${next}`);
     const r = await fetchCanvas(next);
     if (!r.ok) throw new Error(`${r.status} ${r.statusText}: ${(await r.text()).slice(0, 500)}`);
     const body = JSON.parse((await r.text()).replace(/^while\(1\);/, '')); // cookie-auth JSON has a CSRF guard prefix
@@ -193,16 +225,19 @@ function serve() {
 
 const cmd = process.argv[2];
 if (cmd === 'login') {
-  const c = await browserLogin({ headless: false });
+  const c = await browserLogin({ headless: false, remember: process.argv.includes('--remember') });
   if (!c) throw new Error('Login did not finish.');
   const me = await canvasGet('users/self');
   console.error(`Signed in as ${me.name}. Session saved to ${SESSION}`);
 } else if (cmd === 'logout') {
   rmSync(DIR, { recursive: true, force: true });
-  console.error(`Removed ${DIR}`);
+  try {
+    keychain.deletePassword();
+  } catch {}
+  console.error(`Removed ${DIR} and any saved CWL login`);
 } else if (!cmd || cmd === 'serve') {
   serve();
 } else {
-  console.error('usage: ubc-canvas-mcp [serve|login|logout]');
+  console.error('usage: ubc-canvas-mcp [serve | login [--remember] | logout]');
   process.exit(1);
 }

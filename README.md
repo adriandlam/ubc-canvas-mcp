@@ -13,9 +13,11 @@ signs in the way you do: through CWL in a real browser.
 with CWL and MFA once. The server then makes plain HTTPS requests to the Canvas API with that
 session's cookie, so normal calls don't start a browser at all.
 
-When the Canvas session expires, the server opens the saved profile in a hidden browser and lets
-CWL single sign-on renew it. If CWL wants your password or MFA again, a browser window opens so
-you can sign in, and the request that triggered it carries on once you're done.
+When the Canvas session expires, the server opens the saved profile in a hidden browser to get a
+new one. If you logged in with `--remember`, it fills in your CWL login itself, and Duo lets it
+through without MFA for the 30 days the browser is trusted. Otherwise, or once Duo wants MFA again,
+a browser window opens so you can sign in, and the request that triggered it carries on once
+you're done.
 
 The server can only read. It sends GET requests to `canvas.ubc.ca` and nowhere else, so it can't
 submit assignments, post to discussions or send messages.
@@ -34,7 +36,18 @@ submit assignments, post to discussions or send messages.
 npx -y github:adriandlam/ubc-canvas-mcp login
 ```
 
-Sign in with your CWL in the window that opens. It closes by itself and prints your name.
+Sign in with your CWL in the window that opens. When Duo asks whether this is your device, say
+yes, so it skips MFA here for 30 days. The window closes by itself and prints your name.
+
+To have expired sessions renewed without a window, add `--remember`:
+
+```sh
+npx -y github:adriandlam/ubc-canvas-mcp login --remember
+```
+
+This saves the CWL login name and password you type in the window to your system keychain
+(Keychain on macOS, Credential Manager on Windows, Secret Service on Linux). It's only saved once
+the login has actually reached Canvas, and it's only ever filled in on `authentication.ubc.ca`.
 
 ### 2. Connect your client
 
@@ -110,7 +123,7 @@ to students, so models rarely need the docs.
 The profile and session live in `~/Library/Application Support/ubc-canvas-mcp` on macOS,
 `%APPDATA%\ubc-canvas-mcp` on Windows and `~/.config/ubc-canvas-mcp` on Linux. Anyone who can read
 that folder can use your Canvas session, the same as with your browser's own cookies.
-`npx -y github:adriandlam/ubc-canvas-mcp logout` deletes it.
+`npx -y github:adriandlam/ubc-canvas-mcp logout` deletes it, along with any saved CWL login.
 
 ## Limitations
 
