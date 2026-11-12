@@ -1,0 +1,31 @@
+{
+  "name": "ubc-canvas-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for UBC Canvas, signed in with your CWL",
+  "main": "index.js",
+  "keywords": [
+    "mcp",
+    "canvas",
+    "ubc",
+    "claude"
+  ],
+  "author": "Adrian Lam",
+  "license": "MIT",
+  "type": "module",
+  "dependencies": {
+    "playwright-core": "^1.65.0"
+  },
+  "bin": {
+    "ubc-canvas-mcp": "index.js"
+  },
+  "files": [
+    "index.js"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/adriandlam/ubc-canvas-mcp.git"
+  }
+}
