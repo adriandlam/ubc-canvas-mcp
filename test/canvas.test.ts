@@ -1,16 +1,24 @@
 import { afterAll, expect, test } from 'bun:test';
 import { createCanvas } from '../src/canvas';
 
-// One fake server, reached as two origins: 127.0.0.1 is Canvas, localhost is file storage.
-const seen: { url: URL; cookie: string | null }[] = [];
+// Two fake servers on different ports, so different origins: Canvas, and the file storage it
+// redirects downloads to.
+const storageCookies: (string | null)[] = [];
+const storage = Bun.serve({
+  hostname: '127.0.0.1',
+  port: 0,
+  fetch(req) {
+    storageCookies.push(req.headers.get('cookie'));
+    return new Response('%PDF-1.4 bytes');
+  },
+});
 let valid = 'canvas_session=new';
 const server = Bun.serve({
+  hostname: '127.0.0.1',
   port: 0,
   fetch(req): Response {
     const url = new URL(req.url);
     const cookie = req.headers.get('cookie');
-    seen.push({ url, cookie });
-    if (url.hostname === 'localhost') return new Response('%PDF-1.4 bytes');
     if (cookie !== valid) return new Response('{"status":"unauthenticated"}', { status: 401 });
     const json = (body: unknown, headers = {}) => new Response(`while(1);${JSON.stringify(body)}`, { headers });
     switch (url.pathname) {
@@ -21,17 +29,20 @@ const server = Bun.serve({
       case '/api/v1/hidden':
         return new Response('{"status":"unauthorized","errors":[{"message":"user not authorized to perform that action"}]}', { status: 401 });
       case '/api/v1/offsite':
-        return json([], { link: `<http://localhost:${server.port}/api/v1/items>; rel="next"` });
+        return json([], { link: `<${storage.url.origin}/api/v1/items>; rel="next"` });
       case '/api/v1/courses/1/files/9':
         return json({ id: 9, display_name: 'notes.pdf', size: 14, url: `${base.origin}/files/9/download?verifier=x`, 'content-type': 'application/pdf' });
       case '/files/9/download':
-        return Response.redirect(`http://localhost:${server.port}/signed/notes.pdf`, 302);
+        return Response.redirect(`${storage.url.origin}/signed/notes.pdf`, 302);
     }
     return new Response('not found', { status: 404 });
   },
 });
 const base: URL = new URL(`http://127.0.0.1:${server.port}`);
-afterAll(() => server.stop());
+afterAll(() => {
+  server.stop();
+  storage.stop();
+});
 
 // Stands in for auth: hands out the current cookie, and a new one when told the current one is stale.
 let current = 'canvas_session=new';
@@ -74,9 +85,8 @@ test('never sends the cookie outside the Canvas API and downloads', async () => 
 });
 
 test('downloads through a redirect to file storage without the cookie', async () => {
-  seen.length = 0;
   const f = await canvas.download('https://canvas.example/courses/1/files/9?wrap=1');
   expect(new TextDecoder().decode(f.bytes)).toBe('%PDF-1.4 bytes');
   expect(f.type).toBe('application/pdf');
-  expect(seen.find((r) => r.url.hostname === 'localhost')?.cookie).toBeNull();
+  expect(storageCookies).toEqual([null]);
 });
