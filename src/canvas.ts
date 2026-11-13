@@ -1,4 +1,4 @@
-export type Cookie = (stale?: string) => Promise<string>;
+type Cookie = (stale?: string) => Promise<string>;
 export type Params = Record<string, string | number | boolean | (string | number)[]>;
 export type CanvasFile = { url: string; name: string; type: string; bytes: Uint8Array };
 

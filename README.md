@@ -26,7 +26,7 @@ submit assignments, post to discussions or send messages.
 
 - macOS, Windows or Linux
 - [Bun](https://bun.sh) 1.3 or newer
-- Chrome, Edge, Brave or Chromium. If you have none of them, run `bunx playwright install chromium`.
+- Chrome, or Edge on Windows. For Brave, Helium or another Chromium browser, set `UBC_CANVAS_BROWSER` (see Configuration).
 
 ## Setup
 
@@ -129,13 +129,11 @@ copy of what a tool returns (Claude Code saves PDFs it receives to its session f
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `UBC_CANVAS_BROWSER` | first one found | Path to a Chromium-based browser |
+| `UBC_CANVAS_BROWSER` | Chrome (Edge on Windows) | Path to another Chromium-based browser, e.g. Brave |
 | `UBC_CANVAS_MCP_DIR` | see below | Where the browser profile and session are kept |
 | `CANVAS_URL` | `https://canvas.ubc.ca` | Another Canvas instance that signs in through a browser |
 
-The profile and session live in `~/Library/Application Support/ubc-canvas-mcp` on macOS,
-`%APPDATA%\ubc-canvas-mcp` on Windows and `~/.config/ubc-canvas-mcp` on Linux. Anyone who can read
-that folder can use your Canvas session, the same as with your browser's own cookies.
+The profile and session live in `~/.ubc-canvas-mcp`. Anyone who can read that folder can use your Canvas session, the same as with your browser's own cookies.
 `bun src/cli.ts logout` deletes the profile and session, along with any saved CWL login.
 
 ## Limitations

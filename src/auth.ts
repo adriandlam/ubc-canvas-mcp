@@ -1,5 +1,4 @@
-import { chromium } from 'playwright-core';
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { platform } from 'node:os';
 import { join } from 'node:path';
 
@@ -14,14 +13,14 @@ type Login = { username: string; password: string };
 // so every renewal goes through the CWL form: filled from the keychain if a login was saved,
 // otherwise by the user in a visible window.
 export function createAuth(base: URL, dir: string) {
-  const sessionFile = join(dir, 'session.json');
+  const sessionFile = join(dir, 'cookie');
   let current: string | null = null;
   let renewing: Promise<string> | null = null;
 
   const onCanvas = (url: URL) => url.origin === base.origin && !url.pathname.startsWith('/login');
 
   async function savedSession(): Promise<string | null> {
-    return Bun.file(sessionFile).json().then((s) => s.cookie, () => null);
+    return Bun.file(sessionFile).text().then((s) => s || null, () => null);
   }
 
   async function savedLogin(): Promise<Login | null> {
@@ -32,8 +31,9 @@ export function createAuth(base: URL, dir: string) {
   async function signIn(headless: boolean, remember: boolean): Promise<string | null> {
     mkdirSync(dir, { recursive: true, mode: 0o700 });
     const before = await savedSession();
+    const { chromium } = await import('playwright-core'); // only loaded when signing in
     const ctx = await chromium
-      .launchPersistentContext(join(dir, 'profile'), { executablePath: findBrowser(), headless, viewport: null })
+      .launchPersistentContext(join(dir, 'profile'), { ...browser(), headless, viewport: null })
       .catch((e: Error) => {
         if (/ProcessSingleton|already running/i.test(e.message)) return null;
         throw e;
@@ -66,7 +66,7 @@ export function createAuth(base: URL, dir: string) {
 
       if (typed && (remember || login)) await Bun.secrets.set({ ...SECRET, value: JSON.stringify(typed) });
       const cookie = (await ctx.cookies(base.href)).map((c) => `${c.name}=${c.value}`).join('; ');
-      writeFileSync(sessionFile, JSON.stringify({ cookie, saved_at: new Date().toISOString() }), { mode: 0o600 });
+      writeFileSync(sessionFile, cookie, { mode: 0o600 });
       return cookie;
     } finally {
       await ctx.close();
@@ -114,25 +114,8 @@ export function createAuth(base: URL, dir: string) {
   };
 }
 
-function findBrowser(): string {
-  const env = process.env;
-  if (env.UBC_CANVAS_BROWSER) return env.UBC_CANVAS_BROWSER;
-  const candidates =
-    {
-      darwin: ['Google Chrome', 'Microsoft Edge', 'Brave Browser', 'Chromium', 'Helium'].map(
-        (n) => `/Applications/${n}.app/Contents/MacOS/${n}`,
-      ),
-      win32: [
-        'Google\\Chrome\\Application\\chrome.exe',
-        'Microsoft\\Edge\\Application\\msedge.exe',
-        'BraveSoftware\\Brave-Browser\\Application\\brave.exe',
-      ].flatMap((p) => [env.PROGRAMFILES, env['PROGRAMFILES(X86)'], env.LOCALAPPDATA].map((d) => d && join(d, p))),
-      linux: ['google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser', 'microsoft-edge', 'brave-browser'].flatMap(
-        (n) => ['/usr/bin/', '/usr/local/bin/', '/snap/bin/'].map((d) => d + n),
-      ),
-    }[platform() as string] ?? [];
-  const found = [...candidates, chromium.executablePath()].find((p) => p && existsSync(p));
-  if (!found)
-    throw new Error('No Chrome, Edge, Brave or Chromium found. Install one, run `bunx playwright install chromium`, or set UBC_CANVAS_BROWSER.');
-  return found;
+// Every Windows has Edge; elsewhere Playwright finds Chrome. Other Chromium browsers need the path.
+function browser() {
+  const path = process.env.UBC_CANVAS_BROWSER;
+  return path ? { executablePath: path } : { channel: platform() === 'win32' ? 'msedge' : 'chrome' };
 }
