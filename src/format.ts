@@ -7,7 +7,7 @@ export function text(s: string): Content {
   return { type: 'text', text: s.length > MAX_CHARS ? `${s.slice(0, MAX_CHARS)}\n[truncated at ${MAX_CHARS} characters]` : s };
 }
 
-// Canvas JSON is mostly nulls, empty lists, opaque tokens and HTML bodies. Drop the first three and
+// Canvas JSON is mostly nulls, false flags, empty lists, opaque tokens and HTML bodies. Drop the first four and
 // turn HTML into plain text that keeps link targets, so the model can follow files/:id links into
 // canvas_read_file.
 export function compact(v: unknown): unknown {
@@ -23,7 +23,7 @@ export function compact(v: unknown): unknown {
 }
 
 const OPAQUE = new Set(['secure_params', 'lti_context_id', 'uuid', 'context_image']);
-const isEmpty = (v: unknown) => v == null || v === '' || (typeof v === 'object' && Object.keys(v).length === 0);
+const isEmpty = (v: unknown) => v == null || v === false || v === '' || (typeof v === 'object' && Object.keys(v).length === 0);
 
 const ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
 

@@ -38,8 +38,8 @@ function canvasTools(canvas: ReturnType<typeof createCanvas>): Tool[] {
   return [
     {
       name: 'canvas_get',
-      description: `Read-only GET against the Canvas REST API (/api/v1), signed in as the user. Paginated lists are merged, up to 10 pages. Null and empty fields are dropped and HTML is returned as text with links kept.
-Useful paths: users/self/todo, users/self/upcoming_events, planner/items, courses (params {enrollment_state:"active"}),
+      description: `Read-only GET against the Canvas REST API (/api/v1), signed in as the user. Paginated lists are merged, up to 10 pages. Null, false and empty fields are dropped (a missing flag means false) and HTML is returned as text with links kept.
+Useful paths: users/self/todo, users/self/upcoming_events, planner/items (params {start_date:"YYYY-MM-DD"}, or it returns the whole term), courses (params {enrollment_state:"active"}),
 courses/:id/assignments (params {bucket:"upcoming"|"past"|"overdue", "include[]":"submission"}), courses/:id/modules (params {"include[]":"items"}),
 courses/:id/pages/:page_url, courses/:id/files, courses/:id/discussion_topics, announcements (params {"context_codes[]":"course_:id"}),
 courses/:id/assignments/:aid/submissions/self, courses/:id/enrollments (params {user_id:"self"}) for grades,

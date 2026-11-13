@@ -1,8 +1,8 @@
 import { expect, test } from 'bun:test';
 import { compact, fileContent } from '../src/format';
 
-test('drops empty fields but keeps false and 0', () => {
-  expect(compact({ a: null, b: '', c: [], d: {}, e: false, f: 0, g: [{ h: null, i: 1 }] })).toEqual({ e: false, f: 0, g: [{ i: 1 }] });
+test('drops empty and false fields but keeps 0', () => {
+  expect(compact({ a: null, b: '', c: [], d: {}, e: false, f: 0, g: [{ h: null, i: 1 }] })).toEqual({ f: 0, g: [{ i: 1 }] });
 });
 
 test('turns HTML into text that keeps links, equation alt text and entities', () => {

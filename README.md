@@ -116,9 +116,9 @@ Then ask something like:
 
 `canvas_get` covers the whole API through one general tool, and its description lists the
 endpoints that matter most to students, so models rarely need the docs. Two tools keep the tool
-list small in every conversation. Responses leave out empty fields and opaque tokens, and HTML
+list small in every conversation. Responses leave out empty and false fields and opaque tokens, and HTML
 (assignment descriptions, announcements, the syllabus) comes back as text with its links kept,
-which cuts list responses by a quarter to a third.
+which roughly halves assignment and to-do lists.
 
 `canvas_read_file` works for files linked from modules, pages and the syllabus, even when a course
 hides its Files tab. PDFs reach the model as PDFs, so equations, tables and figures survive. The
