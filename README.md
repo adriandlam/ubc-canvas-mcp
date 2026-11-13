@@ -13,20 +13,21 @@ signs in the way you do: through CWL in a real browser.
 with CWL and MFA once. The server then makes plain HTTPS requests to the Canvas API with that
 session's cookie, so normal calls don't start a browser at all.
 
-When the Canvas session expires, the server opens the saved profile in a hidden browser to get a
-new one. If you logged in with `--remember`, it fills in your CWL login itself, and Duo lets it
-through without MFA for the 30 days the browser is trusted. Otherwise, or once Duo wants MFA again,
-a browser window opens so you can sign in, and the request that triggered it carries on once
-you're done.
+When the Canvas session expires and you logged in with `--remember`, the server signs in again in
+a hidden browser: it fills in your CWL login, and Duo lets it through without MFA for the 30 days
+the browser is trusted. Otherwise, or once Duo wants MFA again, a browser window opens so you can
+sign in, and the request that triggered it carries on once you're done.
 
-The server can only read. It sends GET requests to `canvas.ubc.ca` and nowhere else, so it can't
-submit assignments, post to discussions or send messages.
+The server can only read. It sends GET requests to the Canvas API, so it can't submit assignments,
+post to discussions or send messages. File downloads are redirected to Canvas's file storage, and
+those requests go without your cookie.
 
 ## Requirements
 
 - macOS, Windows or Linux
 - [Bun](https://bun.sh) 1.3 or newer
-- Chrome, or Edge on Windows. For Brave, Helium or another Chromium browser, set `UBC_CANVAS_BROWSER` (see Configuration).
+- Chrome, or Edge on Windows. For Brave, Helium or another Chromium browser, set
+  `UBC_CANVAS_BROWSER` (see Configuration).
 
 ## Setup
 
@@ -40,7 +41,8 @@ bun src/cli.ts login
 ```
 
 Sign in with your CWL in the window that opens. When Duo asks whether this is your device, say
-yes, so it skips MFA here for 30 days. The window closes by itself and prints your name.
+yes, so it skips MFA here for 30 days. The window closes by itself and the command prints your
+name.
 
 To have expired sessions renewed without a window, add `--remember`:
 
@@ -116,9 +118,9 @@ Then ask something like:
 
 `canvas_get` covers the whole API through one general tool, and its description lists the
 endpoints that matter most to students, so models rarely need the docs. Two tools keep the tool
-list small in every conversation. Responses leave out empty and false fields and opaque tokens, and HTML
-(assignment descriptions, announcements, the syllabus) comes back as text with its links kept,
-which roughly halves assignment and to-do lists.
+list small in every conversation. Responses leave out empty and false fields and opaque tokens,
+and HTML (assignment descriptions, announcements, the syllabus) comes back as text with its links
+kept, which roughly halves assignment and to-do lists.
 
 `canvas_read_file` works for files linked from modules, pages and the syllabus, even when a course
 hides its Files tab. PDFs reach the model as PDFs, so equations, tables and figures survive. The
@@ -133,8 +135,18 @@ copy of what a tool returns (Claude Code saves PDFs it receives to its session f
 | `UBC_CANVAS_MCP_DIR` | see below | Where the browser profile and session are kept |
 | `CANVAS_URL` | `https://canvas.ubc.ca` | Another Canvas instance that signs in through a browser |
 
-The profile and session live in `~/.ubc-canvas-mcp`. Anyone who can read that folder can use your Canvas session, the same as with your browser's own cookies.
-`bun src/cli.ts logout` deletes the profile and session, along with any saved CWL login.
+The profile and session live in `~/.ubc-canvas-mcp`, readable only by you. Anyone who can read
+that folder can use your Canvas session, the same as with your browser's own cookies.
+`bun src/cli.ts logout` deletes the profile and session, along with the CWL login saved in the
+keychain.
+
+## Security
+
+Everything a tool returns goes to the model, including text other people wrote: announcements,
+discussion posts, files. Text like that can contain instructions aimed at the model. This server
+can't act on them because it only reads, but other tools in the same client can, for example one
+that fetches web pages or sends email, and could send your Canvas data elsewhere. Keep your client
+asking before it uses tools like those.
 
 ## Limitations
 

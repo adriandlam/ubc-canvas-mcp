@@ -38,6 +38,7 @@ function canvasTools(canvas: ReturnType<typeof createCanvas>): Tool[] {
   return [
     {
       name: 'canvas_get',
+      annotations: { readOnlyHint: true, openWorldHint: true },
       description: `Read-only GET against the Canvas REST API (/api/v1), signed in as the user. Paginated lists are merged, up to 10 pages. Null, false and empty fields are dropped (a missing flag means false) and HTML is returned as text with links kept.
 Useful paths: users/self/todo, users/self/upcoming_events, planner/items (params {start_date:"YYYY-MM-DD"}, or it returns the whole term), courses (params {enrollment_state:"active"}),
 courses/:id/assignments (params {bucket:"upcoming"|"past"|"overdue", "include[]":"submission"}), courses/:id/modules (params {"include[]":"items"}),
@@ -59,6 +60,7 @@ find files through modules or pages instead and read them with canvas_read_file.
     },
     {
       name: 'canvas_read_file',
+      annotations: { readOnlyHint: true, openWorldHint: true },
       description: `Read a Canvas file: PDFs and images come back as the file itself, text files as text. Nothing is saved on the user's computer.
 Word and PowerPoint files can't be read; you get their Canvas link instead. Works for files linked from modules, pages and assignments even when a course hides its Files tab.`,
       inputSchema: {

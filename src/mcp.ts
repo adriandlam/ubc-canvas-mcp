@@ -9,6 +9,7 @@ export type Tool = {
   name: string;
   description: string;
   inputSchema: object;
+  annotations?: { readOnlyHint?: boolean; openWorldHint?: boolean };
   run(args: Record<string, any>): Promise<Content[]>;
 };
 
