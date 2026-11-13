@@ -12,3 +12,9 @@ test('reports tool failures as tool errors and unknown tools as protocol errors'
   });
   expect(await handle(tools, { id: 2, method: 'tools/call', params: { name: 'canvas_gte' } })).toMatchObject({ error: { code: -32602 } });
 });
+
+test('agrees to a protocol version it knows and offers its newest otherwise', async () => {
+  const version = async (v: string) => ((await handle(tools, { id: 1, method: 'initialize', params: { protocolVersion: v } })) as any).result.protocolVersion;
+  expect(await version('2025-03-26')).toBe('2025-03-26');
+  expect(await version('2099-01-01')).toBe('2025-11-25');
+});

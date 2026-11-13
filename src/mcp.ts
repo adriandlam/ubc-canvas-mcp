@@ -13,6 +13,9 @@ export type Tool = {
   run(args: Record<string, any>): Promise<Content[]>;
 };
 
+// Newest first. Older clients ignore the fields later versions added (tool annotations).
+const VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'];
+
 type Message = { id?: string | number; method: string; params?: any };
 
 // Minimal MCP over stdio: newline-delimited JSON-RPC, tools only.
@@ -22,7 +25,7 @@ export async function handle(tools: Tool[], { id, method, params = {} }: Message
   switch (method) {
     case 'initialize':
       return result({
-        protocolVersion: params.protocolVersion,
+        protocolVersion: VERSIONS.includes(params.protocolVersion) ? params.protocolVersion : VERSIONS[0],
         capabilities: { tools: {} },
         serverInfo: { name: 'ubc-canvas', version: pkg.version },
       });

@@ -56,8 +56,8 @@ the login has actually reached Canvas, and it's only ever filled in on `authenti
 
 ### 2. Connect your client
 
-Most clients take this config. Use full paths: `which bun` prints the first one, and the second is
-`src/cli.ts` in the folder you cloned.
+Most clients take this config. Use full paths: `which bun` (`where bun` on Windows) prints the
+first one, and the second is `src/cli.ts` in the folder you cloned.
 
 ```json
 {
@@ -69,6 +69,9 @@ Most clients take this config. Use full paths: `which bun` prints the first one,
   }
 }
 ```
+
+If you use a browser other than Chrome, add `"env": { "UBC_CANVAS_BROWSER": "/path/to/browser" }`
+next to `args` (`-e UBC_CANVAS_BROWSER=...` for Claude Code, `--env` for Codex).
 
 <details>
 <summary>Claude Code</summary>
