@@ -1,17 +1,29 @@
+/** Returns the session cookie; pass the one Canvas rejected to get a fresh one. See `createAuth`. */
 type Cookie = (stale?: string) => Promise<string>;
+
+/** Query params. Array values repeat the key, as Canvas expects for `include[]`. */
 export type Params = Record<string, string | number | boolean | (string | number)[]>;
+
+/** A downloaded file. `url` is its Canvas page, for the user to open. */
 export type CanvasFile = { url: string; name: string; type: string; bytes: Uint8Array };
 
+/** Pages merged per list request, at 100 items each. */
 const MAX_PAGES = 10;
+/** Largest file `download` will fetch. */
 const MAX_BYTES = 50e6;
 
-// Read-only Canvas client. Requests start only at API or file-download URLs on `base`, and the
-// cookie never leaves `base`'s origin: redirects elsewhere (signed file-storage URLs) go without it.
+/**
+ * Read-only Canvas client.
+ *
+ * Requests start only at API or file-download URLs on `base`, and the cookie never leaves `base`'s origin: redirects
+ * elsewhere (signed file-storage URLs) go without it.
+ */
 export function createCanvas(base: URL, cookie: Cookie) {
   const allowed = (url: URL) =>
     url.origin === base.origin &&
     (url.pathname.startsWith('/api/v1/') || /^\/(courses\/\d+\/)?files\/\d+\/download$/.test(url.pathname));
 
+  /** Fetches a Canvas URL with the cookie, following redirects by hand and renewing the session once if it expired. */
   async function request(href: string): Promise<Response> {
     let url = new URL(href, base); // resolves "..", so the check below sees the real path
     if (!allowed(url)) throw new Error(`refusing to request ${url.href}`);
@@ -38,9 +50,16 @@ export function createCanvas(base: URL, cookie: Cookie) {
     throw new Error(`too many redirects from ${href}`);
   }
 
+  /**
+   * GETs an API path and parses the JSON. Lists are merged across pages, up to {@link MAX_PAGES}.
+   *
+   * @param path - Path after `/api/v1/`; a leading `/api/v1/` is tolerated.
+   */
   async function get<T = unknown>(path: string, params: Params = {}): Promise<T> {
     const url = new URL(`/api/v1/${path.replace(/^\/*(api\/v1\/)?/, '')}`, base);
-    for (const [k, v] of Object.entries(params)) for (const x of [v].flat()) url.searchParams.append(k, String(x));
+    for (const [key, value] of Object.entries(params)) {
+      for (const item of [value].flat()) url.searchParams.append(key, String(item));
+    }
     if (!url.searchParams.has('per_page')) url.searchParams.set('per_page', '100');
     const items: unknown[] = [];
     let next: string | undefined = url.href;
@@ -58,7 +77,11 @@ export function createCanvas(base: URL, cookie: Cookie) {
     return items as T;
   }
 
-  // `ref` is a file id or anything containing files/:id, such as a module item's url.
+  /**
+   * Downloads a file the user can see, even in courses that hide their Files tab.
+   *
+   * @param ref - A file id, or anything containing `files/:id`, such as a module item's url.
+   */
   async function download(ref: string): Promise<CanvasFile> {
     const m = ref.match(/((?:courses\/\d+\/)?files\/\d+)|^\s*(\d+)\s*$/);
     if (!m) throw new Error('Pass a file id, or a path/URL containing files/:id (e.g. from a module item).');

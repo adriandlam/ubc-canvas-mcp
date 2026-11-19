@@ -2,16 +2,25 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { platform } from 'node:os';
 import { join } from 'node:path';
 
-// UBC's sign-in page. The saved password is only ever typed here, which also keeps it away from
-// any other Canvas instance set with CANVAS_URL.
+/**
+ * UBC's sign-in page. The saved password is only ever typed here, which also keeps it away from any other Canvas
+ * instance set with `CANVAS_URL`.
+ */
 const CWL = 'https://authentication.ubc.ca/';
+/** Where the saved CWL login lives in the OS keychain. */
 const SECRET = { service: 'ubc-canvas-mcp', name: 'cwl' };
 
 type Login = { username: string; password: string };
 
-// The browser profile keeps Duo's 30-day device trust, but not the Canvas or CWL session cookies,
-// so every renewal goes through the CWL form: filled from the keychain if a login was saved,
-// otherwise by the user in a visible window.
+/**
+ * Signs in to Canvas through CWL in a real browser and keeps the resulting session cookie.
+ *
+ * The browser profile keeps Duo's 30-day device trust, but not the Canvas or CWL session cookies, so every renewal
+ * goes through the CWL form: filled from the keychain if a login was saved, otherwise by the user in a visible window.
+ *
+ * @param base - The Canvas instance, e.g. `https://canvas.ubc.ca`.
+ * @param dir - Where the browser profile and session cookie are kept.
+ */
 export function createAuth(base: URL, dir: string) {
   const sessionFile = join(dir, 'cookie');
   let current: string | null = null;
@@ -28,6 +37,12 @@ export function createAuth(base: URL, dir: string) {
     return s ? JSON.parse(s) : null;
   }
 
+  /**
+   * Opens the browser and signs in, returning the Canvas cookie, or `null` if sign-in didn't finish.
+   *
+   * @param headless - Hide the window; only useful when a saved login can fill the form.
+   * @param remember - Save the login the user types to the keychain.
+   */
   async function signIn(headless: boolean, remember: boolean): Promise<string | null> {
     mkdirSync(dir, { recursive: true, mode: 0o700 });
     const before = await savedSession();
@@ -73,7 +88,11 @@ export function createAuth(base: URL, dir: string) {
     }
   }
 
-  // Another server (Claude Code and Claude Desktop each run one) holds the profile and is signing in.
+  /**
+   * Waits for another server to finish signing in and returns the session it saved.
+   *
+   * Claude Code and Claude Desktop each run a server, and only one can hold the browser profile at a time.
+   */
   async function sessionSavedSince(before: string | null): Promise<string | null> {
     for (let waited = 0; waited < 5 * 60_000; waited += 1000) {
       await Bun.sleep(1000);
@@ -83,29 +102,36 @@ export function createAuth(base: URL, dir: string) {
     return null;
   }
 
+  /** Gets a working session: one another server already saved, else a headless sign-in, else a visible one. */
   async function renew(stale?: string): Promise<string> {
     const saved = await savedSession();
     if (saved && saved !== stale) return saved;
     // Without a saved login only a person can get through CWL, so go straight to the window.
-    const cookie = ((await savedLogin()) && (await signIn(true, false))) || (await signIn(false, false));
+    const headless = (await savedLogin()) ? await signIn(true, false) : null;
+    const cookie = headless || (await signIn(false, false));
     if (!cookie) throw new Error('Could not sign in to Canvas. Run `ubc-canvas-mcp login`.');
     return cookie;
   }
 
   return {
-    // A cookie header for Canvas. Pass the one Canvas just rejected to get a new one; concurrent
-    // callers share a single renewal.
+    /**
+     * A cookie header for Canvas. Concurrent callers share a single renewal.
+     *
+     * @param stale - The cookie Canvas just rejected, to force a new one.
+     */
     async cookie(stale?: string): Promise<string> {
       if (current && current !== stale) return current;
       renewing ??= renew(stale).finally(() => (renewing = null));
       return (current = await renewing);
     },
 
+    /** Signs in with a visible window, for the `login` command. */
     async login(remember: boolean): Promise<void> {
       current = await signIn(false, remember);
       if (!current) throw new Error('Login did not finish.');
     },
 
+    /** Forgets everything: the browser profile (and with it Duo's device trust), the session and the saved login. */
     async logout(): Promise<void> {
       rmSync(join(dir, 'profile'), { recursive: true, force: true });
       rmSync(sessionFile, { force: true });
@@ -114,7 +140,7 @@ export function createAuth(base: URL, dir: string) {
   };
 }
 
-// Every Windows has Edge; elsewhere Playwright finds Chrome. Other Chromium browsers need the path.
+/** Every Windows has Edge; elsewhere Playwright finds Chrome. Other Chromium browsers need `UBC_CANVAS_BROWSER`. */
 function browser() {
   const path = process.env.UBC_CANVAS_BROWSER;
   return path ? { executablePath: path } : { channel: platform() === 'win32' ? 'msedge' : 'chrome' };

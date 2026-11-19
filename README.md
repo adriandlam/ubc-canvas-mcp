@@ -154,6 +154,7 @@ asking before it uses tools like those.
 ## Limitations
 
 - Read-only by design. Write tools would let a model submit work as you.
-- Word and PowerPoint files can't be read; the model gets their Canvas link instead.
+- Word, PowerPoint and Excel files come back as text only: no images, charts or speaker notes. Old
+  .doc/.ppt/.xls files can't be read; the model gets their Canvas link instead.
 - It won't run on a headless server. When CWL wants you to sign in again, it needs a screen to
   show the window on.

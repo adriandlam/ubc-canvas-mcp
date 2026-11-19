@@ -1,6 +1,10 @@
 #!/usr/bin/env bun
-// UBC doesn't let students create Canvas API tokens, so this signs in with CWL in a real browser
-// and calls the Canvas API with that browser session's cookie.
+/**
+ * Entry point: `serve` (the default) runs the MCP server; `login` and `logout` manage the CWL sign-in.
+ *
+ * UBC doesn't let students create Canvas API tokens, so this signs in with CWL in a real browser and calls the Canvas
+ * API with that browser session's cookie.
+ */
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { createAuth } from './auth';
@@ -34,6 +38,7 @@ switch (process.argv[2] ?? 'serve') {
     process.exit(1);
 }
 
+/** The two tools the server offers: raw API reads and file reads. */
 function canvasTools(canvas: ReturnType<typeof createCanvas>): Tool[] {
   return [
     {
@@ -61,9 +66,10 @@ find files through modules or pages instead and read them with canvas_read_file.
     {
       name: 'canvas_read_file',
       annotations: { readOnlyHint: true, openWorldHint: true },
-      description: `Read a Canvas file: PDFs and images come back as the file itself, text and code files as text, Jupyter notebooks as their cells and text outputs.
+      description: `Read a Canvas file: PDFs and images come back as the file itself, text and code files as text, Jupyter notebooks as their cells and text outputs,
+Word, PowerPoint and Excel files (.docx, .pptx, .xlsx) as their text (slide by slide, sheet by sheet; no images or speaker notes).
 Some clients save a PDF to a file and give you its path instead; read that file (PDFs over 10 pages need a page range).
-Word and PowerPoint files can't be read; you get their Canvas link instead. Works for files linked from modules, pages and assignments even when a course hides its Files tab.`,
+Older .doc/.ppt/.xls files can't be read; you get their Canvas link instead. Works for files linked from modules, pages and assignments even when a course hides its Files tab.`,
       inputSchema: {
         type: 'object',
         properties: {
