@@ -45,14 +45,54 @@ function htmlToText(html: string): string {
     .trim();
 }
 
-// PDFs and images go to the model as themselves; it reads both. Nothing is written to disk.
+// PDFs and images go to the model as themselves; it reads both. The server never writes them to disk.
 export function fileContent(f: CanvasFile): Content[] {
   const header = text(`${f.name} (${f.type}, ${f.bytes.length} bytes)`);
   const base64 = () => Buffer.from(f.bytes).toString('base64');
   if (f.type === 'application/pdf')
     return [header, { type: 'resource', resource: { uri: f.url, mimeType: f.type, blob: base64() } }];
   if (/^image\/(png|jpeg|gif|webp)$/.test(f.type)) return [header, { type: 'image', data: base64(), mimeType: f.type }];
-  if (/^text\/|^application\/(json|xml)$|\+(json|xml)$/.test(f.type))
-    return [header, text(new TextDecoder().decode(f.bytes))];
+  const s = utf8(f.bytes);
+  if (s !== undefined && /\.ipynb$/i.test(f.name)) return [header, text(notebook(s) ?? s)];
+  // Canvas often labels code and notebooks application/octet-stream, so text is sniffed, not trusted to the type.
+  if (s !== undefined || /^text\/|^application\/(json|xml)$|\+(json|xml)$/.test(f.type)) return [header, text(s ?? new TextDecoder().decode(f.bytes))];
   return [header, text(`This type can't be passed to the model. The user can open it in Canvas: ${f.url}`)];
+}
+
+function utf8(bytes: Uint8Array): string | undefined {
+  try {
+    const s = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    return s.includes('\0') ? undefined : s;
+  } catch {
+    return undefined;
+  }
+}
+
+type Output = { text?: string | string[]; data?: Record<string, string | string[]>; ename?: string; evalue?: string };
+type Cell = { cell_type: string; source: string | string[]; outputs?: Output[] };
+const join = (s: string | string[] = '') => (Array.isArray(s) ? s.join('') : s);
+
+// Cells and their text outputs; image outputs are base64 and would eat the character budget.
+function notebook(s: string): string | undefined {
+  try {
+    const cells: Cell[] = JSON.parse(s).cells;
+    return cells
+      .map((c) => {
+        const src = join(c.source);
+        if (c.cell_type !== 'code') return src;
+        const out = (c.outputs ?? [])
+          .map(
+            (o) =>
+              join(o.text ?? o.data?.['text/plain']) ||
+              (o.ename ? `${o.ename}: ${o.evalue}` : '') ||
+              (o.data && Object.keys(o.data).some((k) => k.startsWith('image/')) ? '[image output]' : ''),
+          )
+          .filter(Boolean)
+          .join('\n');
+        return '```python\n' + src + '\n```' + (out ? `\nOutput:\n${out}` : '');
+      })
+      .join('\n\n');
+  } catch {
+    return undefined;
+  }
 }

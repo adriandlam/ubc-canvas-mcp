@@ -61,7 +61,8 @@ find files through modules or pages instead and read them with canvas_read_file.
     {
       name: 'canvas_read_file',
       annotations: { readOnlyHint: true, openWorldHint: true },
-      description: `Read a Canvas file: PDFs and images come back as the file itself, text files as text. Nothing is saved on the user's computer.
+      description: `Read a Canvas file: PDFs and images come back as the file itself, text and code files as text, Jupyter notebooks as their cells and text outputs.
+Some clients save a PDF to a file and give you its path instead; read that file (PDFs over 10 pages need a page range).
 Word and PowerPoint files can't be read; you get their Canvas link instead. Works for files linked from modules, pages and assignments even when a course hides its Files tab.`,
       inputSchema: {
         type: 'object',

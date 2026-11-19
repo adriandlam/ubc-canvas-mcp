@@ -19,9 +19,24 @@ test('leaves text that merely contains angle brackets alone', () => {
 });
 
 test('sends only what the model can read as content', () => {
-  const file = (type: string) => fileContent({ url: 'https://canvas.example/files/1', name: 'f', type, bytes: new TextEncoder().encode('PK\u0003\u0004 data') });
+  const file = (type: string) => fileContent({ url: 'https://canvas.example/files/1', name: 'f', type, bytes: new TextEncoder().encode('PK\u0003\u0004\u0000 data') });
   expect(file('application/pdf')[1]).toMatchObject({ type: 'resource', resource: { mimeType: 'application/pdf' } });
   expect(file('image/png')[1]).toMatchObject({ type: 'image' });
-  expect(file('image/svg+xml')[1]).toMatchObject({ type: 'text', text: 'PK\u0003\u0004 data' });
+  expect(file('image/svg+xml')[1]).toMatchObject({ type: 'text', text: 'PK\u0003\u0004\u0000 data' });
   expect(file('application/vnd.openxmlformats-officedocument.wordprocessingml.document')[1]).toMatchObject({ text: expect.stringContaining('https://canvas.example/files/1') });
+});
+
+test('reads text Canvas mislabels as binary, and notebooks as cells', () => {
+  const file = (name: string, s: string) => fileContent({ url: 'u', name, type: 'application/octet-stream', bytes: new TextEncoder().encode(s) });
+  expect(file('lp.py', 'from scipy.optimize import linprog')[1]).toMatchObject({ text: 'from scipy.optimize import linprog' });
+  const nb = {
+    cells: [
+      { cell_type: 'markdown', source: ['# LP'] },
+      { cell_type: 'code', source: 'linprog(c)', outputs: [{ data: { 'text/plain': 'x=1', 'image/png': 'AAAA' } }, { data: { 'image/png': 'BBBB' } }] },
+      { cell_type: 'code', source: '-r.fun', outputs: [{ ename: 'TypeError', evalue: 'bad operand' }] },
+    ],
+  };
+  expect(file('L7.ipynb', JSON.stringify(nb))[1]).toMatchObject({
+    text: '# LP\n\n```python\nlinprog(c)\n```\nOutput:\nx=1\n[image output]\n\n```python\n-r.fun\n```\nOutput:\nTypeError: bad operand',
+  });
 });
