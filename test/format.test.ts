@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { compact, fileContent } from '../src/format';
+import { compact, fileContent, json } from '../src/format';
 
 test('drops empty and false fields but keeps 0', () => {
   expect(compact({ a: null, b: '', c: [], d: {}, e: false, f: 0, g: [{ h: null, i: 1 }] })).toEqual({ f: 0, g: [{ i: 1 }] });
@@ -41,4 +41,10 @@ test('reads text Canvas mislabels as binary, and notebooks as cells', () => {
   expect(file('L7.ipynb', JSON.stringify(nb))[1]).toMatchObject({
     text: '# LP\n\n```python\nlinprog(c)\n```\nOutput:\nx=1\n[image output]\n\n```python\n-r.fun\n```\nOutput:\nTypeError: bad operand',
   });
+});
+
+test('puts one list item per line so a saved result can be grepped', () => {
+  expect(json([{ a: 1 }, { b: 'x\ny' }])).toBe('[{"a":1},\n{"b":"x\\ny"}]');
+  expect(JSON.parse(json([{ a: 1 }, 2]))).toEqual([{ a: 1 }, 2]);
+  expect(json({ a: [1, 2] })).toBe('{"a":[1,2]}');
 });

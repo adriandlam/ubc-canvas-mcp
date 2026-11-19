@@ -7,6 +7,10 @@ export function text(s: string): Content {
   return { type: 'text', text: s.length > MAX_CHARS ? `${s.slice(0, MAX_CHARS)}\n[truncated at ${MAX_CHARS} characters]` : s };
 }
 
+// One list item per line: clients that move big results to a file (Claude Code, past ~50k chars) leave the
+// model grep and line ranges, which are useless on one long line.
+export const json = (v: unknown) => (Array.isArray(v) ? `[${v.map((x) => JSON.stringify(x)).join(',\n')}]` : JSON.stringify(v));
+
 // Canvas JSON is mostly nulls, false flags, empty lists, opaque tokens and HTML bodies. Drop the first four and
 // turn HTML into plain text that keeps link targets, so the model can follow files/:id links into
 // canvas_read_file.

@@ -5,7 +5,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { createAuth } from './auth';
 import { createCanvas, type Params } from './canvas';
-import { compact, fileContent, text } from './format';
+import { compact, fileContent, json, text } from './format';
 import { serve, type Tool } from './mcp';
 
 const env = process.env;
@@ -55,7 +55,7 @@ find files through modules or pages instead and read them with canvas_read_file.
         required: ['path'],
       },
       async run({ path, params }: { path: string; params?: Params }) {
-        return [text(JSON.stringify(compact(await canvas.get(String(path), params))))];
+        return [text(json(compact(await canvas.get(String(path), params))))];
       },
     },
     {
