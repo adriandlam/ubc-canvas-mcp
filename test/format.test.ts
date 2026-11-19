@@ -8,9 +8,11 @@ test('drops empty and false fields but keeps 0', () => {
 test('turns HTML into text that keeps links, equation alt text and entities', () => {
   const html =
     '<p>Read the <a href="https://canvas.ubc.ca/courses/1/files/2?wrap=1" data-api-returntype="File">outline</a>&nbsp;&amp; solve ' +
-    '<img class="equation_image" alt="LaTeX: x^2 &lt; 1">.</p><ul><li>one</li><li>two&#x21;</li></ul>';
+    '<img class="equation_image" src="/equation_images/x%255E2" alt="LaTeX: x^2 &lt; 1">.</p><ul><li>one</li><li>two&#x21;</li></ul>' +
+    '<p><img src="https://canvas.ubc.ca/courses/1/files/3/preview" alt="Fig 1.jpg"></p>';
   expect(compact({ description: html })).toEqual({
-    description: 'Read the outline (https://canvas.ubc.ca/courses/1/files/2?wrap=1) & solve LaTeX: x^2 < 1 .\n- one\n- two!',
+    description:
+      'Read the outline (https://canvas.ubc.ca/courses/1/files/2?wrap=1) & solve LaTeX: x^2 < 1 .\n- one\n- two!\nFig 1.jpg (https://canvas.ubc.ca/courses/1/files/3/preview)',
   });
 });
 

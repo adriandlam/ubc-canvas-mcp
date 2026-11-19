@@ -31,7 +31,10 @@ const ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"'
 function htmlToText(html: string): string {
   return html
     .replace(/<(script|style|head)\b[\s\S]*?<\/\1>/gi, '')
-    .replace(/<img\b[^>]*?\balt="([^"]*)"[^>]*>/gi, ' $1 ')
+    .replace(/<img\b[^>]*>/gi, (tag) => {
+      const [alt, src] = [/\balt="([^"]*)"/i, /\bsrc="([^"]*)"/i].map((r) => tag.match(r)?.[1] ?? '');
+      return ` ${alt}${/\/files\/\d+/.test(src) ? ` (${src})` : ''} `; // only links canvas_read_file can follow
+    })
     .replace(/<a\b[^>]*?\bhref="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi, '$2 ($1)')
     .replace(/<li\b[^>]*>/gi, '\n- ')
     .replace(/<(br|\/p|\/div|\/h[1-6]|\/tr|\/ul|\/ol)\b[^>]*>/gi, '\n')
