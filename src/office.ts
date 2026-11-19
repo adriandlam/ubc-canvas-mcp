@@ -2,21 +2,17 @@ import { inflateRawSync } from 'node:zlib';
 import { decodeEntities } from './entities';
 
 /**
- * The text of a Word, PowerPoint or Excel file, or `undefined` if it isn't one or can't be read.
+ * The text of a Word, PowerPoint or Excel file, or `undefined` if it isn't one. Throws if it is one but can't be read.
  *
  * These formats are zip files full of XML, so no Office library is needed: unzip, then strip the tags.
  */
 export function officeText(name: string, type: string, bytes: Uint8Array): string | undefined {
   const kind = officeKind(name, type);
   if (!kind) return undefined;
-  try {
-    const zip = unzip(bytes);
-    if (kind === 'docx') return docx(zip);
-    if (kind === 'pptx') return pptx(zip);
-    return xlsx(zip);
-  } catch {
-    return undefined;
-  }
+  const zip = unzip(bytes);
+  const text = kind === 'docx' ? docx(zip) : kind === 'pptx' ? pptx(zip) : xlsx(zip);
+  if (text === undefined) throw new Error(`no ${kind} content in the zip`);
+  return text;
 }
 
 type Kind = 'docx' | 'pptx' | 'xlsx';
@@ -85,14 +81,18 @@ function stripXml(xml: string): string {
     .trim();
 }
 
-/** Word: the body is one XML file; `w:p` is a paragraph, `w:tab` and `w:br` are tabs and line breaks. */
+/**
+ * Word: the body is one XML file; `w:p` is a paragraph, `w:tab` a tab, `w:br` and `w:cr` line breaks.
+ * Field codes (`w:instrText`, e.g. a table of contents' `TOC \o`) and tracked deletions (`w:delText`) aren't shown text.
+ */
 function docx(zip: Zip): string | undefined {
   const xml = zip.read('word/document.xml');
   if (xml === undefined) return undefined;
   return stripXml(
     xml
+      .replace(/<w:(instrText|delText)\b[^>]*>[\s\S]*?<\/w:\1>/g, '')
       .replace(/<w:tab\/>/g, '\t')
-      .replace(/<w:br\/>/g, '\n')
+      .replace(/<w:(br|cr)\b[^>]*\/>/g, '\n')
       .replace(/<\/w:p>/g, '\n'),
   );
 }
@@ -113,7 +113,7 @@ function pptx(zip: Zip): string | undefined {
     .map(({ path, number }) => {
       // Slide text only appears inside text runs; every other tag is layout and strips to nothing.
       const xml = zip.read(path) ?? '';
-      return `--- Slide ${number} ---\n${stripXml(xml.replace(/<\/a:p>/g, '\n'))}`;
+      return `--- Slide ${number} ---\n${stripXml(xml.replace(/<\/a:p>|<a:br\b[^>]*?(\/>|>[\s\S]*?<\/a:br>)/g, '\n'))}`;
     })
     .join('\n\n');
 }
