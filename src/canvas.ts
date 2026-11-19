@@ -1,12 +1,33 @@
+/** Returns the session cookie; pass the one Canvas rejected to get a fresh one. See `createAuth`. */
 type Cookie = (stale?: string) => Promise<string>;
+
+/** Query params. Array values repeat the key, as Canvas expects for `include[]`. */
 export type Params = Record<string, string | number | boolean | (string | number)[]>;
+
+/** A downloaded file. `url` is its Canvas page, for the user to open. */
 export type CanvasFile = { url: string; name: string; type: string; bytes: Uint8Array };
 
-const MAX_PAGES = 10;
+/** Pages merged per list request. */
+export const MAX_PAGES = 10;
 const MAX_BYTES = 50e6;
 
-// Read-only Canvas client. Requests start only at API or file-download URLs on `base`, and the
-// cookie never leaves `base`'s origin: redirects elsewhere (signed file-storage URLs) go without it.
+/** The API path of a file reference: a file id, or anything containing `files/:id`, such as a module item's url. */
+export function filePath(ref: string): string | undefined {
+  const m = ref.match(/\b((?:courses\/\d+\/)?files\/\d+)|^\s*(\d+)\s*$/);
+  return m ? (m[1] ?? `files/${m[2]}`) : undefined;
+}
+
+export type Canvas = ReturnType<typeof createCanvas>;
+
+/** Canvas sends a signed-out user to its `/login` page. */
+export const isLoginPage = (url: URL, base: URL) => url.origin === base.origin && url.pathname.startsWith('/login');
+
+/**
+ * Read-only Canvas client.
+ *
+ * Requests start only at API or file-download URLs on `base`, and the cookie never leaves `base`'s origin: redirects
+ * elsewhere (signed file-storage URLs) go without it.
+ */
 export function createCanvas(base: URL, cookie: Cookie) {
   const allowed = (url: URL) =>
     url.origin === base.origin &&
@@ -25,7 +46,7 @@ export function createCanvas(base: URL, cookie: Cookie) {
       // Canvas answers 401 both for a dead session ("unauthenticated") and for missing permission.
       const expired =
         (r.status === 401 && (await r.clone().text()).includes('"unauthenticated"')) ||
-        (next?.origin === base.origin && next.pathname.startsWith('/login'));
+        (!!next && isLoginPage(next, base));
       if (expired) {
         if (renewed) throw new Error('Canvas rejected the session right after signing in again.');
         c = await cookie(c);
@@ -40,7 +61,9 @@ export function createCanvas(base: URL, cookie: Cookie) {
 
   async function get<T = unknown>(path: string, params: Params = {}): Promise<T> {
     const url = new URL(`/api/v1/${path.replace(/^\/*(api\/v1\/)?/, '')}`, base);
-    for (const [k, v] of Object.entries(params)) for (const x of [v].flat()) url.searchParams.append(k, String(x));
+    for (const [key, value] of Object.entries(params)) {
+      for (const item of [value].flat()) url.searchParams.append(key, String(item));
+    }
     if (!url.searchParams.has('per_page')) url.searchParams.set('per_page', '100');
     const items: unknown[] = [];
     let next: string | undefined = url.href;
@@ -58,10 +81,10 @@ export function createCanvas(base: URL, cookie: Cookie) {
     return items as T;
   }
 
-  // `ref` is a file id or anything containing files/:id, such as a module item's url.
+  /** Downloads a file the user can see (see {@link filePath}), even in courses that hide their Files tab. */
   async function download(ref: string): Promise<CanvasFile> {
-    const m = ref.match(/((?:courses\/\d+\/)?files\/\d+)|^\s*(\d+)\s*$/);
-    if (!m) throw new Error('Pass a file id, or a path/URL containing files/:id (e.g. from a module item).');
+    const path = filePath(ref);
+    if (!path) throw new Error('Pass a file id, or a path/URL containing files/:id (e.g. from a module item).');
     const meta = await get<{
       id: number;
       display_name: string;
@@ -69,7 +92,7 @@ export function createCanvas(base: URL, cookie: Cookie) {
       url?: string;
       'content-type'?: string;
       lock_explanation?: string;
-    }>(m[1] ?? `files/${m[2]}`);
+    }>(path);
     if (!meta.url) throw new Error(`${meta.display_name} is locked. ${meta.lock_explanation ?? ''}`.trim());
     if (meta.size > MAX_BYTES)
       throw new Error(`${meta.display_name} is ${Math.round(meta.size / 1e6)} MB; the limit is ${MAX_BYTES / 1e6} MB.`);

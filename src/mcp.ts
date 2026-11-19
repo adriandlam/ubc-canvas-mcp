@@ -5,6 +5,15 @@ export type Content =
   | { type: 'image'; data: string; mimeType: string }
   | { type: 'resource'; resource: { uri: string; mimeType: string; blob: string } };
 
+/** Longest text block sent to the model; anything past this is cut with a note saying so. */
+const MAX_CHARS = 150_000;
+
+export function text(s: string): Content {
+  if (s.length <= MAX_CHARS) return { type: 'text', text: s };
+  return { type: 'text', text: `${s.slice(0, MAX_CHARS)}\n[truncated at ${MAX_CHARS} characters]` };
+}
+
+/** An MCP tool: its definition as clients see it, plus `run`, which is kept server-side. */
 export type Tool = {
   name: string;
   description: string;
@@ -13,14 +22,14 @@ export type Tool = {
   run(args: Record<string, any>): Promise<Content[]>;
 };
 
-// Newest first. Older clients ignore the fields later versions added (tool annotations).
+/** MCP protocol versions this server speaks, newest first. Older clients ignore later fields (tool annotations). */
 const VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'];
 
 type Message = { id?: string | number; method: string; params?: any };
 
-// Minimal MCP over stdio: newline-delimited JSON-RPC, tools only.
+/** Answers one JSON-RPC message. Tool errors come back as an `isError` result, not a JSON-RPC error, so the model sees them. */
 export async function handle(tools: Tool[], { id, method, params = {} }: Message): Promise<object | undefined> {
-  if (id === undefined) return; // notifications need no reply
+  if (id === undefined) return; // a notification: JSON-RPC sends no reply
   const result = (result: object) => ({ jsonrpc: '2.0', id, result });
   switch (method) {
     case 'initialize':
@@ -47,6 +56,7 @@ export async function handle(tools: Tool[], { id, method, params = {} }: Message
   }
 }
 
+/** Minimal MCP over stdio: reads newline-delimited JSON-RPC and answers each message as it finishes. */
 export async function serve(tools: Tool[]): Promise<void> {
   for await (const line of console) {
     let msg: Message;
