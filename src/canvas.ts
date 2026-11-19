@@ -7,10 +7,20 @@ export type Params = Record<string, string | number | boolean | (string | number
 /** A downloaded file. `url` is its Canvas page, for the user to open. */
 export type CanvasFile = { url: string; name: string; type: string; bytes: Uint8Array };
 
-/** Pages merged per list request, at 100 items each. */
-const MAX_PAGES = 10;
-/** Largest file `download` will fetch. */
+/** Pages merged per list request. */
+export const MAX_PAGES = 10;
 const MAX_BYTES = 50e6;
+
+/** The API path of a file reference: a file id, or anything containing `files/:id`, such as a module item's url. */
+export function filePath(ref: string): string | undefined {
+  const m = ref.match(/\b((?:courses\/\d+\/)?files\/\d+)|^\s*(\d+)\s*$/);
+  return m ? (m[1] ?? `files/${m[2]}`) : undefined;
+}
+
+export type Canvas = ReturnType<typeof createCanvas>;
+
+/** Canvas sends a signed-out user to its `/login` page. */
+export const isLoginPage = (url: URL, base: URL) => url.origin === base.origin && url.pathname.startsWith('/login');
 
 /**
  * Read-only Canvas client.
@@ -23,7 +33,6 @@ export function createCanvas(base: URL, cookie: Cookie) {
     url.origin === base.origin &&
     (url.pathname.startsWith('/api/v1/') || /^\/(courses\/\d+\/)?files\/\d+\/download$/.test(url.pathname));
 
-  /** Fetches a Canvas URL with the cookie, following redirects by hand and renewing the session once if it expired. */
   async function request(href: string): Promise<Response> {
     let url = new URL(href, base); // resolves "..", so the check below sees the real path
     if (!allowed(url)) throw new Error(`refusing to request ${url.href}`);
@@ -37,7 +46,7 @@ export function createCanvas(base: URL, cookie: Cookie) {
       // Canvas answers 401 both for a dead session ("unauthenticated") and for missing permission.
       const expired =
         (r.status === 401 && (await r.clone().text()).includes('"unauthenticated"')) ||
-        (next?.origin === base.origin && next.pathname.startsWith('/login'));
+        (!!next && isLoginPage(next, base));
       if (expired) {
         if (renewed) throw new Error('Canvas rejected the session right after signing in again.');
         c = await cookie(c);
@@ -50,11 +59,6 @@ export function createCanvas(base: URL, cookie: Cookie) {
     throw new Error(`too many redirects from ${href}`);
   }
 
-  /**
-   * GETs an API path and parses the JSON. Lists are merged across pages, up to {@link MAX_PAGES}.
-   *
-   * @param path - Path after `/api/v1/`; a leading `/api/v1/` is tolerated.
-   */
   async function get<T = unknown>(path: string, params: Params = {}): Promise<T> {
     const url = new URL(`/api/v1/${path.replace(/^\/*(api\/v1\/)?/, '')}`, base);
     for (const [key, value] of Object.entries(params)) {
@@ -77,14 +81,10 @@ export function createCanvas(base: URL, cookie: Cookie) {
     return items as T;
   }
 
-  /**
-   * Downloads a file the user can see, even in courses that hide their Files tab.
-   *
-   * @param ref - A file id, or anything containing `files/:id`, such as a module item's url.
-   */
+  /** Downloads a file the user can see (see {@link filePath}), even in courses that hide their Files tab. */
   async function download(ref: string): Promise<CanvasFile> {
-    const m = ref.match(/((?:courses\/\d+\/)?files\/\d+)|^\s*(\d+)\s*$/);
-    if (!m) throw new Error('Pass a file id, or a path/URL containing files/:id (e.g. from a module item).');
+    const path = filePath(ref);
+    if (!path) throw new Error('Pass a file id, or a path/URL containing files/:id (e.g. from a module item).');
     const meta = await get<{
       id: number;
       display_name: string;
@@ -92,7 +92,7 @@ export function createCanvas(base: URL, cookie: Cookie) {
       url?: string;
       'content-type'?: string;
       lock_explanation?: string;
-    }>(m[1] ?? `files/${m[2]}`);
+    }>(path);
     if (!meta.url) throw new Error(`${meta.display_name} is locked. ${meta.lock_explanation ?? ''}`.trim());
     if (meta.size > MAX_BYTES)
       throw new Error(`${meta.display_name} is ${Math.round(meta.size / 1e6)} MB; the limit is ${MAX_BYTES / 1e6} MB.`);

@@ -1,15 +1,10 @@
 import { inflateRawSync } from 'node:zlib';
-import { decodeEntity } from './format';
+import { decodeEntities } from './entities';
 
 /**
- * Pulls the plain text out of a Word, PowerPoint or Excel file.
+ * The text of a Word, PowerPoint or Excel file, or `undefined` if it isn't one or can't be read.
  *
  * These formats are zip files full of XML, so no Office library is needed: unzip, then strip the tags.
- *
- * @param name - File name, used to tell the formats apart when Canvas sends a generic MIME type.
- * @param type - MIME type Canvas reported.
- * @param bytes - The raw file.
- * @returns The text, or `undefined` if this isn't a supported Office file or it can't be read.
  */
 export function officeText(name: string, type: string, bytes: Uint8Array): string | undefined {
   const kind = officeKind(name, type);
@@ -20,7 +15,7 @@ export function officeText(name: string, type: string, bytes: Uint8Array): strin
     if (kind === 'pptx') return pptx(zip);
     return xlsx(zip);
   } catch {
-    return undefined; // Corrupt or unexpected file: the caller falls back to the Canvas link.
+    return undefined;
   }
 }
 
@@ -35,7 +30,6 @@ function officeKind(name: string, type: string): Kind | undefined {
   return undefined;
 }
 
-/** A zip's files, read on demand. `read` returns `undefined` for a path the zip doesn't contain. */
 type Zip = { paths: string[]; read: (path: string) => string | undefined };
 
 /**
@@ -85,11 +79,8 @@ function unzip(bytes: Uint8Array): Zip {
   return { paths: [...entries.keys()], read };
 }
 
-/** Removes XML tags, decodes entities, and tidies the blank lines left behind. */
 function stripXml(xml: string): string {
-  return xml
-    .replace(/<[^>]*>/g, '')
-    .replace(/&(#x[0-9a-f]+|#\d+|\w+);/gi, decodeEntity)
+  return decodeEntities(xml.replace(/<[^>]*>/g, ''))
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
@@ -170,7 +161,6 @@ function cellValue(type: string, body: string, sharedStrings: string[]): string 
   return stripXml(body.match(/<v>([\s\S]*?)<\/v>/)?.[1] ?? '');
 }
 
-/** Reads one attribute's value out of a tag string; `''` if absent. */
 function attribute(tag: string, name: string): string {
   return tag.match(new RegExp(`\\s${name}="([^"]*)"`))?.[1] ?? '';
 }

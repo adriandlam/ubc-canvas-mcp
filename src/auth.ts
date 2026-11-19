@@ -1,14 +1,16 @@
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { platform } from 'node:os';
 import { join } from 'node:path';
+import { isLoginPage } from './canvas';
 
 /**
  * UBC's sign-in page. The saved password is only ever typed here, which also keeps it away from any other Canvas
  * instance set with `CANVAS_URL`.
  */
 const CWL = 'https://authentication.ubc.ca/';
-/** Where the saved CWL login lives in the OS keychain. */
 const SECRET = { service: 'ubc-canvas-mcp', name: 'cwl' };
+/** How long a person gets to sign in in the visible window; another server waits this long for them too. */
+const SIGN_IN_WAIT = 5 * 60_000;
 
 type Login = { username: string; password: string };
 
@@ -17,16 +19,13 @@ type Login = { username: string; password: string };
  *
  * The browser profile keeps Duo's 30-day device trust, but not the Canvas or CWL session cookies, so every renewal
  * goes through the CWL form: filled from the keychain if a login was saved, otherwise by the user in a visible window.
- *
- * @param base - The Canvas instance, e.g. `https://canvas.ubc.ca`.
- * @param dir - Where the browser profile and session cookie are kept.
  */
 export function createAuth(base: URL, dir: string) {
   const sessionFile = join(dir, 'cookie');
   let current: string | null = null;
   let renewing: Promise<string> | null = null;
 
-  const onCanvas = (url: URL) => url.origin === base.origin && !url.pathname.startsWith('/login');
+  const onCanvas = (url: URL) => url.origin === base.origin && !isLoginPage(url, base);
 
   async function savedSession(): Promise<string | null> {
     return Bun.file(sessionFile).text().then((s) => s || null, () => null);
@@ -39,14 +38,12 @@ export function createAuth(base: URL, dir: string) {
 
   /**
    * Opens the browser and signs in, returning the Canvas cookie, or `null` if sign-in didn't finish.
-   *
-   * @param headless - Hide the window; only useful when a saved login can fill the form.
-   * @param remember - Save the login the user types to the keychain.
+   * `headless` only gets through CWL when a saved login can fill the form.
    */
   async function signIn(headless: boolean, remember: boolean): Promise<string | null> {
     mkdirSync(dir, { recursive: true, mode: 0o700 });
     const before = await savedSession();
-    const { chromium } = await import('playwright-core'); // only loaded when signing in
+    const { chromium } = await import('playwright-core'); // dynamic, so serving doesn't load Playwright
     const ctx = await chromium
       .launchPersistentContext(join(dir, 'profile'), { ...browser(), headless, viewport: null })
       .catch((e: Error) => {
@@ -75,7 +72,7 @@ export function createAuth(base: URL, dir: string) {
       if (!onCanvas(new URL(page.url())) && (autofill || !headless)) {
         if (!headless) console.error('Log in with your CWL in the browser window. It closes by itself when you are done.');
         // Duo lets a trusted browser straight through; otherwise this waits for MFA in the window.
-        await page.waitForURL(onCanvas, { timeout: headless ? 60_000 : 5 * 60_000 }).catch(() => {});
+        await page.waitForURL(onCanvas, { timeout: headless ? 60_000 : SIGN_IN_WAIT }).catch(() => {});
       }
       if (!onCanvas(new URL(page.url()))) return null;
 
@@ -94,7 +91,7 @@ export function createAuth(base: URL, dir: string) {
    * Claude Code and Claude Desktop each run a server, and only one can hold the browser profile at a time.
    */
   async function sessionSavedSince(before: string | null): Promise<string | null> {
-    for (let waited = 0; waited < 5 * 60_000; waited += 1000) {
+    for (let waited = 0; waited < SIGN_IN_WAIT; waited += 1000) {
       await Bun.sleep(1000);
       const now = await savedSession();
       if (now && now !== before) return now;
@@ -102,7 +99,6 @@ export function createAuth(base: URL, dir: string) {
     return null;
   }
 
-  /** Gets a working session: one another server already saved, else a headless sign-in, else a visible one. */
   async function renew(stale?: string): Promise<string> {
     const saved = await savedSession();
     if (saved && saved !== stale) return saved;
@@ -114,18 +110,13 @@ export function createAuth(base: URL, dir: string) {
   }
 
   return {
-    /**
-     * A cookie header for Canvas. Concurrent callers share a single renewal.
-     *
-     * @param stale - The cookie Canvas just rejected, to force a new one.
-     */
+    /** A cookie header for Canvas; pass the one Canvas rejected to renew it. Concurrent callers share one renewal. */
     async cookie(stale?: string): Promise<string> {
       if (current && current !== stale) return current;
       renewing ??= renew(stale).finally(() => (renewing = null));
       return (current = await renewing);
     },
 
-    /** Signs in with a visible window, for the `login` command. */
     async login(remember: boolean): Promise<void> {
       current = await signIn(false, remember);
       if (!current) throw new Error('Login did not finish.');

@@ -117,7 +117,7 @@ Then ask something like:
 | Tool | What it does |
 |---|---|
 | `canvas_get` | Any read-only [Canvas REST API](https://canvas.instructure.com/doc/api/) endpoint, with pagination handled |
-| `canvas_read_file` | A file: PDFs and images as the file itself, text, code and notebooks as text |
+| `canvas_read_file` | A file: PDFs and images as the file itself; text, code, notebooks and Word, PowerPoint and Excel files as text |
 
 `canvas_get` covers the whole API through one general tool, and its description lists the
 endpoints that matter most to students, so models rarely need the docs. Two tools keep the tool
