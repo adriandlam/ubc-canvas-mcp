@@ -67,18 +67,18 @@ test('reads text Canvas mislabels as binary, and notebooks as cells in their lan
   expect(read('L7.ipynb', 'application/octet-stream', utf8('{not json'))).toMatchObject({ text: '{not json' });
 });
 
-test('reads Word paragraphs, tabs and entities', () => {
+test('reads Word paragraphs, tabs, breaks and entities, without field codes or deleted text', () => {
   const doc = zip({
     '[Content_Types].xml': '<Types/>',
-    'word/document.xml': '<w:document><w:body><w:p><w:r><w:t>Due</w:t></w:r><w:r><w:tab/><w:t>Friday &amp; late</w:t></w:r></w:p><w:p><w:r><w:t>Line &#x32;</w:t></w:r></w:p></w:body></w:document>',
+    'word/document.xml': '<w:document><w:body><w:p><w:r><w:t>Due</w:t></w:r><w:r><w:tab/><w:t>Friday &amp; late</w:t></w:r></w:p><w:p><w:r><w:t>Line &#x32;</w:t></w:r></w:p><w:p><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> TOC \\o "1-3" </w:instrText></w:r><w:r><w:t>Contents</w:t></w:r><w:del><w:r><w:delText>old</w:delText></w:r></w:del><w:r><w:br w:type="page"/><w:t>Next</w:t><w:cr/><w:t>page</w:t></w:r></w:p></w:body></w:document>',
   });
-  expect(read('a.docx', 'application/octet-stream', doc)).toMatchObject({ text: 'Due\tFriday & late\nLine 2' });
+  expect(read('a.docx', 'application/octet-stream', doc)).toMatchObject({ text: 'Due\tFriday & late\nLine 2\nContents\nNext\npage' });
 });
 
 test('reads PowerPoint slides in numeric order', () => {
-  const slide = (s: string) => `<p:sld><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>${s}</a:t></a:r></a:p><a:p><a:r><a:t>more</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>`;
+  const slide = (s: string) => `<p:sld><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>${s}</a:t></a:r></a:p><a:p><a:r><a:t>more</a:t></a:r><a:br><a:rPr lang="en"/></a:br><a:r><a:t>soft</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>`;
   const deck = zip({ 'ppt/slides/slide10.xml': slide('ten'), 'ppt/slides/slide2.xml': slide('two'), 'ppt/slides/_rels/slide2.xml.rels': '<x/>' });
-  expect(read('lecture.pptx', '', deck)).toMatchObject({ text: '--- Slide 2 ---\ntwo\nmore\n\n--- Slide 10 ---\nten\nmore' });
+  expect(read('lecture.pptx', '', deck)).toMatchObject({ text: '--- Slide 2 ---\ntwo\nmore\nsoft\n\n--- Slide 10 ---\nten\nmore\nsoft' });
 });
 
 test('reads Excel sheets by name with shared, inline and number cells', () => {
@@ -93,9 +93,9 @@ test('reads Excel sheets by name with shared, inline and number cells', () => {
   expect(read('marks.xlsx', '', book)).toMatchObject({ text: '--- Sheet: Grades & marks ---\nName\tScore\nAda\t3' });
 });
 
-test('detects Office files by MIME type and falls back to the link when the zip is broken', () => {
+test('detects Office files by MIME type and says when a damaged one cannot be read', () => {
   const doc = zip({ 'word/document.xml': '<w:p><w:t>hi</w:t></w:p>' });
   const word = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
   expect(read('download', word, doc)).toMatchObject({ text: 'hi' });
-  expect(read('x.docx', word, doc.slice(0, 20))).toMatchObject({ text: expect.stringContaining('https://canvas.example/files/1') });
+  expect(read('x.docx', word, doc.slice(0, 20))).toMatchObject({ text: expect.stringMatching(/couldn't be read.*https:\/\/canvas.example\/files\/1/) });
 });
