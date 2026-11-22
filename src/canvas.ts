@@ -84,6 +84,7 @@ export function createCanvas(base: URL, cookie: Cookie) {
   /** Downloads a file the user can see (see {@link filePath}), even in courses that hide their Files tab. */
   async function download(ref: string): Promise<CanvasFile> {
     const path = filePath(ref);
+    if (/^\s*https?:/i.test(ref) && new URL(ref.trim()).origin !== base.origin) throw new Error(`${ref.trim()} isn't a file on ${base.host}.`);
     if (!path) throw new Error('Pass a file id, or a path/URL containing files/:id (e.g. from a module item).');
     const meta = await get<{
       id: number;

@@ -85,8 +85,12 @@ test('never sends the cookie outside the Canvas API and downloads', async () => 
 });
 
 test('downloads through a redirect to file storage without the cookie', async () => {
-  const f = await canvas.download('https://canvas.example/courses/1/files/9?wrap=1');
+  const f = await canvas.download(`${base.origin}/courses/1/files/9?wrap=1`);
   expect(new TextDecoder().decode(f.bytes)).toBe('%PDF-1.4 bytes');
   expect(f.type).toBe('application/pdf');
   expect(storageCookies).toEqual([null]);
+});
+
+test('refuses a files/:id link on another site instead of reading that id from Canvas', async () => {
+  await expect(canvas.download('https://elsewhere.example/files/9/pic.png')).rejects.toThrow(/isn't a file on/);
 });

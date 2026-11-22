@@ -31,11 +31,16 @@ export function fileContent(f: CanvasFile): Content[] {
   if (f.type === 'application/pdf') return [header, { type: 'resource', resource: { uri: f.url, mimeType: f.type, blob: base64() } }];
   if (/^image\/(png|jpeg|gif|webp)$/.test(f.type)) return [header, { type: 'image', data: base64(), mimeType: f.type }];
 
-  const office = officeText(f.name, f.type, f.bytes);
-  if (office !== undefined) return [header, text(office)];
+  const link = (why: string) => [header, text(`${why} The user can open it in Canvas: ${f.url}`)];
+  try {
+    const office = officeText(f.name, f.type, f.bytes);
+    if (office !== undefined) return [header, text(office)];
+  } catch {
+    return link("This Office file couldn't be read; it may be damaged or in an older format.");
+  }
 
   const s = asText(f);
-  if (s === undefined) return [header, text(`This type can't be passed to the model. The user can open it in Canvas: ${f.url}`)];
+  if (s === undefined) return link("This type can't be passed to the model.");
   return [header, text(/\.ipynb$/i.test(f.name) ? (notebook(s) ?? s) : s)];
 }
 
