@@ -151,6 +151,22 @@ can't act on them because it only reads, but other tools in the same client can,
 that fetches web pages or sends email, and could send your Canvas data elsewhere. Keep your client
 asking before it uses tools like those.
 
+## Development
+
+```sh
+bun install
+bun test           # unit tests, no Canvas account needed
+bun run check      # type check
+```
+
+CI runs both on every pull request. Each tool lives in one file, `src/canvas-get.ts` and
+`src/canvas-read-file.ts`: its description, what it does and how it formats the result, so a change
+to a tool usually touches only that file and its test. `src/canvas.ts` is the HTTP client, `src/auth.ts`
+the CWL sign-in and `src/mcp.ts` the protocol.
+
+Report security problems privately through the repository's Security tab ("Report a vulnerability"),
+not in a public issue.
+
 ## Limitations
 
 - Read-only by design. Write tools would let a model submit work as you.
